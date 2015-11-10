@@ -1,0 +1,10 @@
+flags: {}
+packages:
+- '.'
+- '../gl-pal'
+- '../linear-extra'
+- '../glfw-pal'
+- '../halive'
+- '../lens-extra'
+- '../freetype-gl-mini'
+resolver: nightly-2015-11-03
