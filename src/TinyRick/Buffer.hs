@@ -10,7 +10,7 @@ import Data.Sequence (Seq)
 import Data.Monoid
 import Data.String
 import Data.Foldable
-import Data.Maybe
+-- import Data.Maybe
 import Data.List (findIndex)
 -- import Debug.Trace
 -- import Text.Printf

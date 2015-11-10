@@ -15,4 +15,4 @@ module TinyRick.Render where
 -- import Control.Monad.State
 -- import Halive.Utils
 
-import TinyRick.Buffer
+-- import TinyRick.Buffer

@@ -114,22 +114,24 @@ mainLoop win events font = do
         closeOnEscape win e
 
         superIsDown <- (== KeyState'Pressed) <$> getKey win Key'LeftSuper
-        shiftIsDown <- (== KeyState'Pressed) <$> getKey win Key'LeftShift
+        -- shiftIsDown <- (== KeyState'Pressed) <$> getKey win Key'LeftShift
         if 
             | superIsDown ->
                 onKeyDown e Key'S      $ saveTinyRick =<< preuse activeRick
-            | shiftIsDown -> do
-                onKey e Key'Left       $ activeRickBuf %= selectLeft
-                onKey e Key'Right      $ activeRickBuf %= selectRight
             | otherwise -> do
+                onKey  e Key'Tab       $ rotateActiveRick
+
                 onChar e $ \char      -> activeRickBuf %= insertChar char
-                onKey  e Key'Backspace $ activeRickBuf %= backspace
                 onKey  e Key'Enter     $ activeRickBuf %= insertChar '\n'
+                onKey  e Key'Backspace $ activeRickBuf %= backspace
+
                 onKey  e Key'Left      $ activeRickBuf %= moveLeft
                 onKey  e Key'Right     $ activeRickBuf %= moveRight
                 onKey  e Key'Down      $ activeRickBuf %= moveDown
                 onKey  e Key'Up        $ activeRickBuf %= moveUp
-                onKey  e Key'Tab       $ rotateActiveRick
+
+                onKeyWithMods e [ModKeyShift] Key'Left  $ activeRickBuf %= selectLeft
+                onKeyWithMods e [ModKeyShift] Key'Right $ activeRickBuf %= selectRight
                   
 
     immutably $ do
