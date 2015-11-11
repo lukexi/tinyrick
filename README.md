@@ -14,3 +14,4 @@ GL livecoding text editor in Haskell
 [ ] Abstract into MVP + Filename + HasFocus IORef so we can render many of these
 
 [x] Key repeat support
+[x] Copy/paste support

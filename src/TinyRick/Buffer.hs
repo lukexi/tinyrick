@@ -24,6 +24,9 @@ seqReplace (start, end) xs original = left <> xs <> right
     left = Seq.take start original
     right = Seq.drop end original
 
+seqRange :: (Int, Int) -> Seq a -> Seq a
+seqRange (start, end) = Seq.drop start . Seq.take end
+
 data Buffer = Buffer 
   { bufSelection :: !(Int, Int)
   , bufText      :: !(Seq Char)
@@ -43,6 +46,9 @@ bufferFromString string = Buffer
 
 stringFromBuffer :: Buffer -> String
 stringFromBuffer = toList . bufText
+
+selectionFromBuffer :: Buffer -> String
+selectionFromBuffer (Buffer selection text) = toList (seqRange selection text)
 
 insertBuffer :: Seq Char -> Buffer -> Buffer
 insertBuffer chars (Buffer (start, end) text) = 

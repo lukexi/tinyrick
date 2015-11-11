@@ -52,10 +52,12 @@ tinyRickFromFile filePath pose = liftIO $ do
     , _trPath = filePath
     }
 
-saveTinyRick :: (Foldable t, MonadIO m) => t TinyRick -> m ()
-saveTinyRick mTinyRick = forM_ mTinyRick $ \tinyRick -> do
+saveTinyRick :: (MonadIO m) => TinyRick -> m ()
+saveTinyRick tinyRick = do
   liftIO $ putStrLn $ "Saving " ++ (tinyRick ^. trPath) ++ "..."
   liftIO $ writeFile (tinyRick ^. trPath) (tinyRick ^. trBuffer . to stringFromBuffer)
+
+
 
 main :: IO ()
 main = do
@@ -116,8 +118,16 @@ mainLoop win events font = do
         superIsDown <- (== KeyState'Pressed) <$> getKey win Key'LeftSuper
         -- shiftIsDown <- (== KeyState'Pressed) <$> getKey win Key'LeftShift
         if 
-            | superIsDown ->
-                onKeyDown e Key'S      $ saveTinyRick =<< preuse activeRick
+            | superIsDown -> do
+                onKeyDown e Key'S      $ maybe (return ()) saveTinyRick =<< preuse activeRick
+                onKeyDown e Key'C      $ do
+                  mTinyRick <- preuse activeRick
+                  forM_ mTinyRick $ \tinyRick -> 
+                    setClipboardString win (selectionFromBuffer (tinyRick ^. trBuffer))
+                onKeyDown e Key'V      $ do
+                  mString <- getClipboardString win
+                  forM_ mString $ \string -> 
+                    activeRickBuf %= insertString string
             | otherwise -> do
                 onKey  e Key'Tab       $ rotateActiveRick
 
