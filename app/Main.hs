@@ -25,6 +25,13 @@ fontFile :: FilePath
 -- fontFile = "fonts/LuckiestGuy.ttf"
 fontFile = "fonts/SourceCodePro-Regular.ttf"
 
+type RickID = Int
+
+data TinyRick = TinyRick
+  { _trPose   :: Pose GLfloat
+  , _trBuffer :: Buffer
+  }
+makeLenses ''TinyRick
 
 data AppState = AppState 
     { _appRicks        :: Map RickID TinyRick
@@ -61,8 +68,8 @@ main = do
             rickID = i
             position = V3 (-8 + iF*5) 6 (-11)
             pose = newPose & posPosition .~ position
-        tinyRick <- tinyRickFromFile filePath pose
-        appRicks . at rickID ?= tinyRick
+        buffer <- bufferFromFile filePath
+        appRicks . at rickID ?= TinyRick pose buffer
         appActiveRickID .= rickID
       whileWindow win $ mainLoop win events font 
 
@@ -90,7 +97,7 @@ mainLoop win events font = do
         onKey e Key'Tab rotateActiveRick
 
         -- Pass events to the active rickID
-        handleTinyRickEvent win e (appRicks . ix activeRickID)
+        handleBufferEvent win e (appRicks . ix activeRickID . trBuffer)
     
     immutably $ do
         -- Clear the framebuffer

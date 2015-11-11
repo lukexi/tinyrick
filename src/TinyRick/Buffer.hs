@@ -30,29 +30,32 @@ seqRange (start, end) = Seq.drop start . Seq.take end
 data Buffer = Buffer 
   { bufSelection :: !(Int, Int)
   , bufText      :: !(Seq Char)
+  , bufPath      :: !FilePath
   } deriving Show
 
 newBuffer :: Buffer
 newBuffer = Buffer 
   { bufSelection = (0,0)
   , bufText = ""
+  , bufPath = ""
   }
 
-bufferFromString :: String -> Buffer
-bufferFromString string = Buffer
+bufferFromString :: FilePath -> String -> Buffer
+bufferFromString filePath string = Buffer
   { bufSelection = (0,0)
   , bufText = fromString string
+  , bufPath = filePath
   }
 
 stringFromBuffer :: Buffer -> String
 stringFromBuffer = toList . bufText
 
 selectionFromBuffer :: Buffer -> String
-selectionFromBuffer (Buffer selection text) = toList (seqRange selection text)
+selectionFromBuffer (Buffer selection text _) = toList (seqRange selection text)
 
 insertBuffer :: Seq Char -> Buffer -> Buffer
-insertBuffer chars (Buffer (start, end) text) = 
-  Buffer { bufSelection = (newCursor, newCursor), bufText = newText }
+insertBuffer chars buffer@(Buffer (start, end) text _) = 
+  buffer { bufSelection = (newCursor, newCursor), bufText = newText }
   where 
     newText = seqReplace (start, end) chars text
     newCursor = (start + Seq.length chars)
@@ -69,32 +72,32 @@ insert chars = insertBuffer chars
 moveLeft :: Buffer -> Buffer
 moveLeft = go
   where
-    go buffer@(Buffer (0, 0) _) = buffer
-    go buffer@(Buffer (start, end) _) 
+    go buffer@(Buffer (0, 0) _ _) = buffer
+    go buffer@(Buffer (start, end) _ _) 
       | start == end = buffer { bufSelection = (start - 1, start - 1) }
-    go buffer@(Buffer (start, _) _) = buffer { bufSelection = (start, start) }
+    go buffer@(Buffer (start, _) _ _) = buffer { bufSelection = (start, start) }
 
 selectLeft :: Buffer -> Buffer
 selectLeft = go
   where
-    go buffer@(Buffer (0,       _) _) = buffer
-    go buffer@(Buffer (start, end) _) = buffer { bufSelection = (start - 1, end) }
+    go buffer@(Buffer (0,       _) _ _) = buffer
+    go buffer@(Buffer (start, end) _ _) = buffer { bufSelection = (start - 1, end) }
 
 moveRight :: Buffer -> Buffer
 moveRight = go
   where
-    go buffer@(Buffer (start, end) text) 
+    go buffer@(Buffer (start, end) text _) 
       | end == Seq.length text = buffer
       | start == end = buffer { bufSelection = (end + 1, end + 1) }
-    go buffer@(Buffer (_, end) _) = buffer { bufSelection = (end, end) }
+    go buffer@(Buffer (_, end) _ _) = buffer { bufSelection = (end, end) }
 
 
 selectRight :: Buffer -> Buffer
 selectRight = go
   where
-    go buffer@(Buffer (_, end) text)
+    go buffer@(Buffer (_, end) text _)
       | end == Seq.length text = buffer
-    go buffer@(Buffer (start, end) _) = buffer { bufSelection = (start, end + 1) }
+    go buffer@(Buffer (start, end) _ _) = buffer { bufSelection = (start, end + 1) }
 
 backspace :: Buffer -> Buffer
 backspace buffer = 
