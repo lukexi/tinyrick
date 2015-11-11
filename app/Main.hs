@@ -25,14 +25,6 @@ fontFile :: FilePath
 -- fontFile = "fonts/LuckiestGuy.ttf"
 fontFile = "fonts/SourceCodePro-Regular.ttf"
 
-type RickID = Int
-
-data TinyRick = TinyRick
-  { _trPose   :: Pose GLfloat
-  , _trBuffer :: Buffer
-  , _trPath   :: FilePath
-  }
-makeLenses ''TinyRick
 
 data AppState = AppState 
     { _appRicks        :: Map RickID TinyRick
@@ -42,22 +34,6 @@ makeLenses ''AppState
 
 newAppState :: AppState
 newAppState = AppState { _appRicks = mempty, _appActiveRickID = 0 }
-
-tinyRickFromFile :: MonadIO m => FilePath -> Pose GLfloat -> m TinyRick
-tinyRickFromFile filePath pose = liftIO $ do
-  text <- readFile filePath
-  return TinyRick 
-    { _trPose = pose
-    , _trBuffer = bufferFromString text
-    , _trPath = filePath
-    }
-
-saveTinyRick :: (MonadIO m) => TinyRick -> m ()
-saveTinyRick tinyRick = do
-  liftIO $ putStrLn $ "Saving " ++ (tinyRick ^. trPath) ++ "..."
-  liftIO $ writeFile (tinyRick ^. trPath) (tinyRick ^. trBuffer . to stringFromBuffer)
-
-
 
 main :: IO ()
 main = do
@@ -82,12 +58,10 @@ main = do
     void . flip runStateT newAppState $ do
       forM_ (zip [0..] files) $ \(i, filePath) -> do
         let iF = fromIntegral i
-        let z = (-11)
-        tinyRick <- tinyRickFromFile filePath $ 
-          newPose 
-            & posPosition .~ (V3 (-8 + iF*5) 6 z)
-            -- & posOrientation .~ axisAngle (V3 0 1 0) 0.5
-        let rickID = i
+            rickID = i
+            position = V3 (-8 + iF*5) 6 (-11)
+            pose = newPose & posPosition .~ position
+        tinyRick <- tinyRickFromFile filePath pose
         appRicks . at rickID ?= tinyRick
         appActiveRickID .= rickID
       whileWindow win $ mainLoop win events font 
@@ -106,63 +80,35 @@ mainLoop win events font = do
     (x,y,w,h) <- getWindowViewport win
     glViewport x y w h
     projection44 <- getWindowProjection win 45 0.01 1000
-    -- glGetErrors
 
     -- Get mouse/keyboard/OS events from GLFW
     activeRickID <- use appActiveRickID
-    let activeRick    = appRicks . ix activeRickID
-        activeRickBuf = appRicks . ix activeRickID . trBuffer
     processEvents events $ \e -> do
         closeOnEscape win e
+        
+        -- Switch which rick has focus on Tab
+        onKey e Key'Tab rotateActiveRick
 
-        superIsDown <- (== KeyState'Pressed) <$> getKey win Key'LeftSuper
-        -- shiftIsDown <- (== KeyState'Pressed) <$> getKey win Key'LeftShift
-        if 
-            | superIsDown -> do
-                onKeyDown e Key'S      $ maybe (return ()) saveTinyRick =<< preuse activeRick
-                onKeyDown e Key'C      $ do
-                  mTinyRick <- preuse activeRick
-                  forM_ mTinyRick $ \tinyRick -> 
-                    setClipboardString win (selectionFromBuffer (tinyRick ^. trBuffer))
-                onKeyDown e Key'V      $ do
-                  mString <- getClipboardString win
-                  forM_ mString $ \string -> 
-                    activeRickBuf %= insertString string
-            | otherwise -> do
-                onKey  e Key'Tab       $ rotateActiveRick
-
-                onChar e $ \char      -> activeRickBuf %= insertChar char
-                onKey  e Key'Enter     $ activeRickBuf %= insertChar '\n'
-                onKey  e Key'Backspace $ activeRickBuf %= backspace
-
-                onKey  e Key'Left      $ activeRickBuf %= moveLeft
-                onKey  e Key'Right     $ activeRickBuf %= moveRight
-                onKey  e Key'Down      $ activeRickBuf %= moveDown
-                onKey  e Key'Up        $ activeRickBuf %= moveUp
-
-                onKeyWithMods e [ModKeyShift] Key'Left  $ activeRickBuf %= selectLeft
-                onKeyWithMods e [ModKeyShift] Key'Right $ activeRickBuf %= selectRight
-                  
-
+        -- Pass events to the active rickID
+        handleTinyRickEvent win e (appRicks . ix activeRickID)
+    
     immutably $ do
         -- Clear the framebuffer
         glClear (GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT)
 
         -- Render our scene
-        let view44       = viewMatrixFromPose newPose
+        let view44 = viewMatrixFromPose newPose
         
-        ricks        <- use appRicks
+        ricks <- use appRicks
         forM_ (Map.toList ricks) $ \(rickID, rick) -> do
-          let rot = if rickID /= activeRickID 
-                then newPose & posOrientation .~ (axisAngle (V3 0 1 0) 0.5)
-                else newPose
-          let model44      = (transformationFromPose $ addPoses rot (rick ^. trPose))
+          let rot = axisAngle (V3 0 1 0) $ if rickID /= activeRickID 
+                                              then 0.5
+                                              else 0
+          let model44      = (transformationFromPose (rotateBy rot (rick ^. trPose)))
                                 !*! scaleMatrix 0.003
               mvp          = projection44 !*! view44 !*! model44
               buffer = rick ^. trBuffer
           renderText font (bufText buffer) (bufSelection buffer) mvp
         
         swapBuffers win
-
-
 
