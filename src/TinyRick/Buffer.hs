@@ -125,7 +125,7 @@ moveDown buffer =
         -- Thanks to the (-1) fake newline, we can always count on nextLineIndex begin at least 1
         let currentLineLocation     = lineLocations !! (nextLineIndex - 1)
             nextLineLocation        = lineLocations !! nextLineIndex
-            nextNextLineLocation    = lineLocations !! (nextLineIndex + 1)
+            nextNextLineLocation    = lineLocations !! (min (length lineLocations - 1) $ nextLineIndex + 1)
             currentDistanceFromLeft = cursorLocation - currentLineLocation
             -- Don't jump futher than the next newline location
             newCursor               = min nextNextLineLocation (nextLineLocation + currentDistanceFromLeft)

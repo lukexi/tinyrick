@@ -3,6 +3,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 
 import Graphics.GL.Pal
 import Graphics.UI.GLFW.Pal
@@ -21,16 +22,18 @@ import Data.Maybe
 
 fontFile :: FilePath
 fontFile = "fonts/SourceCodePro-Regular.ttf"
--- fontFile = "fonts/Vera.ttf"
--- fontFile = "fonts/Lobster-Regular.ttf"
--- fontFile = "fonts/LuckiestGuy.ttf"
+
+data ShaderPlaneUniforms = ShaderPlaneUniforms
+  { uMVP2 :: UniformLocation (M44 GLfloat)
+  } deriving (Data)
 
 type RickID = Int
 
 data TinyRick = TinyRick
-  { _trPose   :: Pose GLfloat
-  , _trBuffer :: Buffer
+  { _trBuffer :: Buffer
+  , _trPose   :: Pose GLfloat
   , _trFont   :: Font
+  , _trShape  :: IO (Shape ShaderPlaneUniforms)
   }
 makeLenses ''TinyRick
 
@@ -51,6 +54,9 @@ main = do
     glyphQuadProg <- createShaderProgram "src/TinyRick/glyphQuad.vert" "src/TinyRick/glyphQuad.frag"
     font          <- makeGlyphs fontFile 30 glyphQuadProg
 
+    -- planeGeometry size normal up subdivisions
+    planeGeo <- planeGeometry (V2 1 1) (V3 0 0 1) (V3 0 1 0) 1
+
     glClearColor 0.1 0.1 0.1 1
     glEnable GL_DEPTH_TEST
     glDisable GL_DEPTH_TEST
@@ -58,18 +64,28 @@ main = do
     glEnable    GL_BLEND
     glBlendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
     
-    let files = [ "app/Main.hs"
-                , "src/TinyRick/glyphQuad.vert"
-                , "src/TinyRick/glyphQuad.frag"
-                ]
+    let shaders = [ "app/shader.frag"
+                  ]
 
     void . flip runStateT newAppState $ do
-      forM_ (zip [0..] files) $ \(i, filePath) -> do
-        let position = V3 (-8 + fromIntegral i * 5) 6 (-11)
-            pose = newPose & posPosition .~ position
-        buffer <- bufferFromFile filePath
-        appRicks . at i ?= TinyRick pose buffer font
-      whileWindow win $ mainLoop win events
+
+      -- Create an editor instance for each fragment shader      
+      forM_ (zip [0..] shaders) $ \(i, shaderPath) -> do
+        let pose = newPose & posPosition .~ position
+            -- position = V3 (-8 + fromIntegral i * 5) 6 (-11)
+            position = (V3 0 0 (-1))
+
+        getPlane <- liftIO $ withReshaderProgram "app/geo.vert" shaderPath $ makeShape planeGeo
+
+        buffer <- bufferFromFile shaderPath
+        appRicks . at i ?= TinyRick buffer pose font getPlane
+
+        appActiveRickID .= i
+
+      whileWindow win $ 
+        mainLoop win events 
+
+
 
 mainLoop :: (MonadState AppState m, MonadIO m) => Window -> Events -> m ()
 mainLoop win events = do
@@ -87,6 +103,12 @@ mainLoop win events = do
 
         -- Pass events to the active rickID
         handleBufferEvent win e (appRicks . ix activeRickID . trBuffer)
+
+        -- Continuously save the file
+        let save = maybe (return ()) saveBuffer =<< preuse (appRicks . ix activeRickID . trBuffer)
+        onChar e $ \_ -> save
+        onKey  e Key'Enter     $ save
+        onKey  e Key'Backspace $ save
     
     immutably $ do
         -- Clear the framebuffer
@@ -100,12 +122,21 @@ mainLoop win events = do
           let rot = axisAngle (V3 0 1 0) $ if rickID /= activeRickID 
                                               then 0.5
                                               else 0
-          let model44      = (transformationFromPose (rotateBy rot (rick ^. trPose)))
-                                !*! scaleMatrix 0.003
-              mvp          = projection44 !*! view44 !*! model44
-              buffer = rick ^. trBuffer
-              font   = rick ^. trFont
-          renderText font (bufText buffer) (bufSelection buffer) mvp
+              shift = V3 0 0 0
+              model44      = transformationFromPose . shiftBy shift . rotateBy rot $ rick ^. trPose
+              mvp          = projView44 !*! model44
+              planeMVP     = mvp
+              textMVP      = mvp !*! translateMatrix (V3 (-0.5) (0.5) 0)
+              projView44   = projection44 !*! view44
+              buffer       = rick ^. trBuffer
+              font         = rick ^. trFont
+
+          shape <- liftIO $ rick ^. trShape
+          withShape shape $ do
+            uniformM44 (uMVP2 (sUniforms shape)) planeMVP
+            drawShape
+
+          renderText font (bufText buffer) (bufSelection buffer) (textMVP !*! scaleMatrix 0.001)
         
         swapBuffers win
 
