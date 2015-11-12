@@ -14,6 +14,7 @@ import Control.Monad
 import Control.Monad.State
 import           Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Time
 
 import Halive.Utils
 
@@ -25,15 +26,17 @@ fontFile = "fonts/SourceCodePro-Regular.ttf"
 
 data ShaderPlaneUniforms = ShaderPlaneUniforms
   { uMVP2 :: UniformLocation (M44 GLfloat)
+  , uTime :: UniformLocation GLfloat
   } deriving (Data)
 
 type RickID = Int
 
 data TinyRick = TinyRick
-  { _trBuffer :: Buffer
-  , _trPose   :: Pose GLfloat
-  , _trFont   :: Font
-  , _trShape  :: IO (Shape ShaderPlaneUniforms)
+  { _trBuffer  :: Buffer
+  , _trPose    :: Pose GLfloat
+  , _trFont    :: Font
+  , _trShape   :: IO (Shape ShaderPlaneUniforms)
+  , _trScroll  :: GLfloat
   }
 makeLenses ''TinyRick
 
@@ -67,20 +70,21 @@ main = do
     let shaders = [ "app/shader.frag"
                   ]
 
-    void . flip runStateT newAppState $ do
-
-      -- Create an editor instance for each fragment shader      
+    initialState <- reacquire 1 $ flip execStateT newAppState $ do
+      -- Create an editor instance for each fragment shader
       forM_ (zip [0..] shaders) $ \(i, shaderPath) -> do
         let pose = newPose & posPosition .~ position
             -- position = V3 (-8 + fromIntegral i * 5) 6 (-11)
-            position = (V3 0 0 (-1))
+            position = (V3 0 0 (-1.1))
 
         getPlane <- liftIO $ withReshaderProgram "app/geo.vert" shaderPath $ makeShape planeGeo
 
         buffer <- bufferFromFile shaderPath
-        appRicks . at i ?= TinyRick buffer pose font getPlane
+        appRicks . at i ?= TinyRick buffer pose font getPlane 0
 
         appActiveRickID .= i
+
+    void . flip runStateT initialState $ do
 
       whileWindow win $ 
         mainLoop win events 
@@ -89,6 +93,8 @@ main = do
 
 mainLoop :: (MonadState AppState m, MonadIO m) => Window -> Events -> m ()
 mainLoop win events = do
+    persistState 1
+
     (x,y,w,h) <- getWindowViewport win
     glViewport x y w h
     projection44 <- getWindowProjection win 45 0.01 1000
@@ -101,11 +107,19 @@ mainLoop win events = do
         -- Switch which rick has focus on Tab
         onKey e Key'Tab rotateActiveRick
 
+        -- Scroll the active rick
+        onScroll e $ \_ y -> do
+          appRicks . ix activeRickID . trScroll %= \s ->
+            min 100 (max (-1000) (s + y))
+          -- appRicks . ix activeRickID . trScroll .= 0
+
         -- Pass events to the active rickID
         handleBufferEvent win e (appRicks . ix activeRickID . trBuffer)
 
         -- Continuously save the file
-        let save = maybe (return ()) saveBuffer =<< preuse (appRicks . ix activeRickID . trBuffer)
+        let save = do
+              persistState 1
+              maybe (return ()) saveBuffer =<< preuse (appRicks . ix activeRickID . trBuffer)
         onChar e $ \_ -> save
         onKey  e Key'Enter     $ save
         onKey  e Key'Backspace $ save
@@ -121,22 +135,26 @@ mainLoop win events = do
         forM_ (Map.toList ricks) $ \(rickID, rick) -> do
           let rot = axisAngle (V3 0 1 0) $ if rickID /= activeRickID 
                                               then 0.5
-                                              else 0
-              shift = V3 0 0 0
+                                              else 0.0
+              shift = V3 0 0 (-0.1)
               model44      = transformationFromPose . shiftBy shift . rotateBy rot $ rick ^. trPose
               mvp          = projView44 !*! model44
-              planeMVP     = mvp
-              textMVP      = mvp !*! translateMatrix (V3 (-0.5) (0.5) 0)
+              planeMVP     = mvp !*! translateMatrix (V3 0.5 0 0)
+              textMVP      = mvp !*! translateMatrix (V3 (-1) (0.5 - scroll*0.01 + 1) 0)
               projView44   = projection44 !*! view44
               buffer       = rick ^. trBuffer
               font         = rick ^. trFont
+              scroll       = rick ^. trScroll
 
           shape <- liftIO $ rick ^. trShape
           withShape shape $ do
-            uniformM44 (uMVP2 (sUniforms shape)) planeMVP
+            let ShaderPlaneUniforms{..} = sUniforms shape
+            uniformM44 uMVP2 planeMVP
+            -- Pass time uniform
+            uniformF uTime =<< realToFrac . utctDayTime <$> liftIO getCurrentTime
             drawShape
 
-          renderText font (bufText buffer) (bufSelection buffer) (textMVP !*! scaleMatrix 0.001)
+          renderText font (bufText buffer) (bufSelection buffer) (textMVP !*! scaleMatrix 0.0005)
         
         swapBuffers win
 

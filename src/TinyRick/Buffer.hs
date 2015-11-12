@@ -21,7 +21,7 @@ instance IsString (Seq Char) where
 seqReplace :: (Int, Int) -> Seq a -> Seq a -> Seq a
 seqReplace (start, end) xs original = left <> xs <> right
   where
-    left = Seq.take start original
+    left  = Seq.take start original
     right = Seq.drop end original
 
 seqRange :: (Int, Int) -> Seq a -> Seq a
