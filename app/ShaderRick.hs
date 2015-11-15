@@ -55,7 +55,7 @@ main = do
     (win, events) <- reacquire 0 $ createWindow "Tiny Rick" 1024 768
 
     glyphQuadProg <- createShaderProgram "src/TinyRick/glyphQuad.vert" "src/TinyRick/glyphQuad.frag"
-    font          <- makeGlyphs fontFile 30 glyphQuadProg
+    font          <- createFont fontFile 30 glyphQuadProg
 
     -- planeGeometry size normal up subdivisions
     planeGeo <- planeGeometry (V2 1 1) (V3 0 0 1) (V3 0 1 0) 1
