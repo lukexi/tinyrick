@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE LambdaCase #-}
 
 import Graphics.GL.Pal
 import Graphics.UI.GLFW.Pal
@@ -15,6 +16,7 @@ import Control.Monad.State
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Time
+import Data.IORef
 
 import Halive.Utils
 
@@ -35,7 +37,7 @@ data TinyRick = TinyRick
   { _trBuffer  :: Buffer
   , _trPose    :: Pose GLfloat
   , _trFont    :: Font
-  , _trShape   :: IO (Shape ShaderPlaneUniforms)
+  , _trShape   :: IO (Shape ShaderPlaneUniforms, String)
   , _trScroll  :: GLfloat
   }
 makeLenses ''TinyRick
@@ -72,14 +74,14 @@ main = do
 
     initialState <- reacquire 1 $ flip execStateT newAppState $ do
       -- Create an editor instance for each fragment shader
-      forM_ (zip [0..] shaders) $ \(i, shaderPath) -> do
+      forM_ (zip [0..] shaders) $ \(i, fragShaderPath) -> do
         let pose = newPose & posPosition .~ position
             -- position = V3 (-8 + fromIntegral i * 5) 6 (-11)
             position = (V3 0 0 (-1.1))
+            vertShaderPath = "app/geo.vert"
+        getPlane <- liftIO $ makeRecompiler vertShaderPath fragShaderPath planeGeo 
 
-        getPlane <- liftIO $ withReshaderProgram "app/geo.vert" shaderPath $ makeShape planeGeo
-
-        buffer <- bufferFromFile shaderPath
+        buffer <- bufferFromFile fragShaderPath
         appRicks . at i ?= TinyRick buffer pose font getPlane 0
 
         appActiveRickID .= i
@@ -89,6 +91,25 @@ main = do
       whileWindow win $ 
         mainLoop win events 
 
+makeRecompiler vertShaderPath fragShaderPath planeGeo  = do
+
+  (shader, result) <- createShaderProgram' vertShaderPath fragShaderPath
+  shape <- makeShape planeGeo shader
+  shapeRef <- newIORef (shape, result)
+
+  lookForChange <- watchFiles [vertShaderPath, fragShaderPath]
+
+  return $ do
+    lookForChange >>= \case
+      Nothing -> return ()
+      Just _ -> do
+        (newShader, result) <- createShaderProgram' vertShaderPath fragShaderPath
+        goodShape <- if null result 
+          then makeShape planeGeo newShader 
+          else fst <$> readIORef shapeRef
+        writeIORef shapeRef (goodShape, result)
+
+    readIORef shapeRef
 
 
 mainLoop :: (MonadState AppState m, MonadIO m) => Window -> Events -> m ()
@@ -146,7 +167,7 @@ mainLoop win events = do
               font         = rick ^. trFont
               scroll       = rick ^. trScroll
 
-          shape <- liftIO $ rick ^. trShape
+          (shape, shaderErrors) <- liftIO (rick ^. trShape)
           withShape shape $ do
             let ShaderPlaneUniforms{..} = sUniforms shape
             uniformM44 uMVP2 planeMVP
@@ -155,6 +176,8 @@ mainLoop win events = do
             drawShape
 
           renderText font (bufText buffer) (bufSelection buffer) (textMVP !*! scaleMatrix 0.0005)
+          when (not (null shaderErrors)) $ do
+            renderText font shaderErrors (0,0) (planeMVP !*! translateMatrix (V3 (-0.5) 0.5 0) !*! scaleMatrix 0.0005)
         
         swapBuffers win
 
