@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -10,6 +9,8 @@ import Data.Sequence (Seq)
 import Data.Monoid
 import Data.Foldable
 import Data.List (findIndex)
+import Data.Maybe
+-- import Debug.Trace
 
 seqReplace :: (Int, Int) -> Seq a -> Seq a -> Seq a
 seqReplace (start, end) xs original = left <> xs <> right
@@ -59,8 +60,18 @@ measureBuffer (Buffer _ _ text _) =
         (0,0) lineIndices
   in (numColumns, numLines)
 
+-- | Find the column in the current line
+-- (in other words, the distance from the previous newline)
+currentColumn :: Buffer -> Int
+currentColumn (Buffer (start, _) _ text _) =
+  let previousNewline = fromMaybe (-1) . Seq.elemIndexR '\n' . Seq.take start $ text
+  in  start - previousNewline
+
+updateCurrentColumn :: Buffer -> Buffer
+updateCurrentColumn buffer = buffer { bufColumn = currentColumn buffer }
+
 insertBuffer :: Seq Char -> Buffer -> Buffer
-insertBuffer chars buffer@(Buffer (start, end) _ text _) = 
+insertBuffer chars buffer@(Buffer (start, end) _ text _) = updateCurrentColumn $
   buffer { bufSelection = (newCursor, newCursor), bufText = newText }
   where 
     newText = seqReplace (start, end) chars text
@@ -76,7 +87,7 @@ insert :: Seq Char -> Buffer -> Buffer
 insert chars = insertBuffer chars
 
 moveLeft :: Buffer -> Buffer
-moveLeft = go
+moveLeft = updateCurrentColumn . go
   where
     go buffer@(Buffer (0, 0) _ _ _) = buffer
     go buffer@(Buffer (start, end) _ _ _) 
@@ -84,13 +95,13 @@ moveLeft = go
     go buffer@(Buffer (start, _) _ _ _) = buffer { bufSelection = (start, start) }
 
 selectLeft :: Buffer -> Buffer
-selectLeft = go
+selectLeft = updateCurrentColumn . go
   where
     go buffer@(Buffer (0,       _) _ _ _) = buffer
     go buffer@(Buffer (start, end) _ _ _) = buffer { bufSelection = (start - 1, end) }
 
 moveRight :: Buffer -> Buffer
-moveRight = go
+moveRight = updateCurrentColumn . go
   where
     go buffer@(Buffer (start, end) _ text _) 
       | end == Seq.length text = buffer
@@ -99,7 +110,7 @@ moveRight = go
 
 
 selectRight :: Buffer -> Buffer
-selectRight = go
+selectRight = updateCurrentColumn . go
   where
     go buffer@(Buffer (_, end) _ text _)
       | end == Seq.length text = buffer
@@ -111,28 +122,26 @@ backspace buffer =
   in insert (Seq.fromList "") (if start == end then selectLeft buffer else buffer)
 
 moveToEnd :: Buffer -> Buffer
-moveToEnd buffer =
+moveToEnd buffer = updateCurrentColumn $
   let end = Seq.length (bufText buffer)
   in buffer { bufSelection = (end, end) }
 
 moveToBeginning :: Buffer -> Buffer
-moveToBeginning buffer = 
+moveToBeginning buffer = updateCurrentColumn $
   buffer { bufSelection = (0, 0) }
 
 moveDown :: Buffer -> Buffer
 moveDown buffer = 
   let (cursorLocation, _)     = bufSelection buffer
       -- Add an artificial "newline" at -1 to represent the beginning of the document
-      lineLocations           = (-1):Seq.elemIndicesL '\n' (bufText buffer)
+      lineLocations           = Seq.elemIndicesL '\n' (bufText buffer)
   -- If there's no newline beyond the cursor, do nothing
   in case findIndex (>= cursorLocation) lineLocations of
       Nothing -> buffer
       Just nextLineIndex -> 
-        -- Thanks to the (-1) fake newline, we can always count on nextLineIndex begin at least 1
-        let currentLineLocation     = lineLocations !! (nextLineIndex - 1)
-            nextLineLocation        = lineLocations !! nextLineIndex
+        let nextLineLocation        = lineLocations !! nextLineIndex
             nextNextLineLocation    = lineLocations !! (min (length lineLocations - 1) $ nextLineIndex + 1)
-            currentDistanceFromLeft = cursorLocation - currentLineLocation
+            currentDistanceFromLeft = bufColumn buffer
             -- Don't jump futher than the next newline location
             newCursor               = min nextNextLineLocation (nextLineLocation + currentDistanceFromLeft)
         in buffer { bufSelection = (newCursor, newCursor) }
@@ -148,7 +157,7 @@ moveUp buffer =
       Just nextLineIndex -> 
         let currentLineLocation     = lineLocations !! (nextLineIndex - 1)
             prevLineLocation        = lineLocations !! (nextLineIndex - 2)
-            currentDistanceFromLeft = cursorLocation - currentLineLocation
+            currentDistanceFromLeft = bufColumn buffer
             -- Don't jump futher than the prev newline location
             newCursor               = max 0 $ min currentLineLocation (prevLineLocation + currentDistanceFromLeft)
         in buffer { bufSelection = (newCursor, newCursor) }

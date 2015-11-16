@@ -130,9 +130,9 @@ mainLoop win events = do
         onKey e Key'Tab rotateActiveRick
 
         -- Scroll the active rick
-        onScroll e $ \_ y -> do
+        onScroll e $ \_ scrollY -> do
           appRicks . ix activeRickID . trScroll %= \s ->
-            min 100 (max (-1000) (s + y))
+            min 100 (max (-1000) (s + scrollY))
           -- appRicks . ix activeRickID . trScroll .= 0
 
         -- Pass events to the active rickID
