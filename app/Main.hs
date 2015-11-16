@@ -101,7 +101,6 @@ mainLoop win events = do
                                               then 0.5
                                               else 0
           let model44      = (transformationFromPose (rotateBy rot (rick ^. trPose)))
-                                !*! scaleMatrix 0.003
               mvp          = projection44 !*! view44 !*! model44
               buffer = rick ^. trBuffer
               font   = rick ^. trFont

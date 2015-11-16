@@ -8,15 +8,8 @@ module TinyRick.Buffer where
 import qualified Data.Sequence as Seq
 import Data.Sequence (Seq)
 import Data.Monoid
-import Data.String
 import Data.Foldable
--- import Data.Maybe
 import Data.List (findIndex)
--- import Debug.Trace
--- import Text.Printf
-
-instance IsString (Seq Char) where
-  fromString = Seq.fromList
 
 seqReplace :: (Int, Int) -> Seq a -> Seq a -> Seq a
 seqReplace (start, end) xs original = left <> xs <> right
@@ -29,6 +22,7 @@ seqRange (start, end) = Seq.drop start . Seq.take end
 
 data Buffer = Buffer 
   { bufSelection :: !(Int, Int)
+  , bufColumn    :: !Int
   , bufText      :: !(Seq Char)
   , bufPath      :: !FilePath
   } deriving Show
@@ -36,25 +30,37 @@ data Buffer = Buffer
 newBuffer :: Buffer
 newBuffer = Buffer 
   { bufSelection = (0,0)
-  , bufText = ""
-  , bufPath = ""
+  , bufColumn    = 0
+  , bufText      = mempty
+  , bufPath      = mempty
   }
 
 bufferFromString :: FilePath -> String -> Buffer
 bufferFromString filePath string = Buffer
   { bufSelection = (0,0)
-  , bufText = fromString string
-  , bufPath = filePath
+  , bufColumn    = 0
+  , bufText      = Seq.fromList string
+  , bufPath      = filePath
   }
 
 stringFromBuffer :: Buffer -> String
 stringFromBuffer = toList . bufText
 
 selectionFromBuffer :: Buffer -> String
-selectionFromBuffer (Buffer selection text _) = toList (seqRange selection text)
+selectionFromBuffer (Buffer selection _ text _) = toList (seqRange selection text)
+
+-- | Returns the number of lines and the number of columns in the longest line
+measureBuffer :: Buffer -> (Int, Int)
+measureBuffer (Buffer _ _ text _) = 
+  let lineIndices = Seq.elemIndicesL '\n' text
+      numLines = length lineIndices + 1
+      numColumns = fst $ foldl' (\(maxCol, lastIndex) thisIndex -> 
+        (max maxCol (thisIndex - lastIndex), thisIndex)) 
+        (0,0) lineIndices
+  in (numColumns, numLines)
 
 insertBuffer :: Seq Char -> Buffer -> Buffer
-insertBuffer chars buffer@(Buffer (start, end) text _) = 
+insertBuffer chars buffer@(Buffer (start, end) _ text _) = 
   buffer { bufSelection = (newCursor, newCursor), bufText = newText }
   where 
     newText = seqReplace (start, end) chars text
@@ -64,7 +70,7 @@ insertChar :: Char -> Buffer -> Buffer
 insertChar char = insertString [char]
 
 insertString :: String -> Buffer -> Buffer
-insertString string = insert (fromString string)
+insertString string = insert (Seq.fromList string)
 
 insert :: Seq Char -> Buffer -> Buffer
 insert chars = insertBuffer chars
@@ -72,37 +78,37 @@ insert chars = insertBuffer chars
 moveLeft :: Buffer -> Buffer
 moveLeft = go
   where
-    go buffer@(Buffer (0, 0) _ _) = buffer
-    go buffer@(Buffer (start, end) _ _) 
+    go buffer@(Buffer (0, 0) _ _ _) = buffer
+    go buffer@(Buffer (start, end) _ _ _) 
       | start == end = buffer { bufSelection = (start - 1, start - 1) }
-    go buffer@(Buffer (start, _) _ _) = buffer { bufSelection = (start, start) }
+    go buffer@(Buffer (start, _) _ _ _) = buffer { bufSelection = (start, start) }
 
 selectLeft :: Buffer -> Buffer
 selectLeft = go
   where
-    go buffer@(Buffer (0,       _) _ _) = buffer
-    go buffer@(Buffer (start, end) _ _) = buffer { bufSelection = (start - 1, end) }
+    go buffer@(Buffer (0,       _) _ _ _) = buffer
+    go buffer@(Buffer (start, end) _ _ _) = buffer { bufSelection = (start - 1, end) }
 
 moveRight :: Buffer -> Buffer
 moveRight = go
   where
-    go buffer@(Buffer (start, end) text _) 
+    go buffer@(Buffer (start, end) _ text _) 
       | end == Seq.length text = buffer
       | start == end = buffer { bufSelection = (end + 1, end + 1) }
-    go buffer@(Buffer (_, end) _ _) = buffer { bufSelection = (end, end) }
+    go buffer@(Buffer (_, end) _ _ _) = buffer { bufSelection = (end, end) }
 
 
 selectRight :: Buffer -> Buffer
 selectRight = go
   where
-    go buffer@(Buffer (_, end) text _)
+    go buffer@(Buffer (_, end) _ text _)
       | end == Seq.length text = buffer
-    go buffer@(Buffer (start, end) _ _) = buffer { bufSelection = (start, end + 1) }
+    go buffer@(Buffer (start, end) _ _ _) = buffer { bufSelection = (start, end + 1) }
 
 backspace :: Buffer -> Buffer
 backspace buffer = 
   let (start, end) = bufSelection buffer
-  in insert "" (if start == end then selectLeft buffer else buffer)
+  in insert (Seq.fromList "") (if start == end then selectLeft buffer else buffer)
 
 moveToEnd :: Buffer -> Buffer
 moveToEnd buffer =

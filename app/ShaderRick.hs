@@ -27,7 +27,7 @@ fontFile :: FilePath
 fontFile = "fonts/SourceCodePro-Regular.ttf"
 
 data ShaderPlaneUniforms = ShaderPlaneUniforms
-  { uMVP2 :: UniformLocation (M44 GLfloat)
+  { uMVP  :: UniformLocation (M44 GLfloat)
   , uTime :: UniformLocation GLfloat
   } deriving (Data)
 
@@ -91,6 +91,7 @@ main = do
       whileWindow win $ 
         mainLoop win events 
 
+makeRecompiler :: Data u => FilePath -> FilePath -> Geometry -> IO (IO (Shape u, String))
 makeRecompiler vertShaderPath fragShaderPath planeGeo  = do
 
   (shader, result) <- createShaderProgram' vertShaderPath fragShaderPath
@@ -103,11 +104,11 @@ makeRecompiler vertShaderPath fragShaderPath planeGeo  = do
     lookForChange >>= \case
       Nothing -> return ()
       Just _ -> do
-        (newShader, result) <- createShaderProgram' vertShaderPath fragShaderPath
-        goodShape <- if null result 
+        (newShader, newResult) <- createShaderProgram' vertShaderPath fragShaderPath
+        goodShape <- if null newResult 
           then makeShape planeGeo newShader 
           else fst <$> readIORef shapeRef
-        writeIORef shapeRef (goodShape, result)
+        writeIORef shapeRef (goodShape, newResult)
 
     readIORef shapeRef
 
@@ -159,10 +160,10 @@ mainLoop win events = do
                                               else 0.0
               shift = V3 0 0 (-0.1)
               model44      = transformationFromPose . shiftBy shift . rotateBy rot $ rick ^. trPose
+              projView44   = projection44 !*! view44
               mvp          = projView44 !*! model44
               planeMVP     = mvp !*! translateMatrix (V3 0.5 0 0)
               textMVP      = mvp !*! translateMatrix (V3 (-1) (0.5 - scroll*0.01 + 1) 0)
-              projView44   = projection44 !*! view44
               buffer       = rick ^. trBuffer
               font         = rick ^. trFont
               scroll       = rick ^. trScroll
@@ -170,14 +171,14 @@ mainLoop win events = do
           (shape, shaderErrors) <- liftIO (rick ^. trShape)
           withShape shape $ do
             let ShaderPlaneUniforms{..} = sUniforms shape
-            uniformM44 uMVP2 planeMVP
+            uniformM44 uMVP planeMVP
             -- Pass time uniform
             uniformF uTime =<< realToFrac . utctDayTime <$> liftIO getCurrentTime
             drawShape
 
-          renderText font (bufText buffer) (bufSelection buffer) (textMVP !*! scaleMatrix 0.0005)
+          renderText font (bufText buffer) (bufSelection buffer) textMVP
           when (not (null shaderErrors)) $ do
-            renderText font shaderErrors (0,0) (planeMVP !*! translateMatrix (V3 (-0.5) 0.5 0) !*! scaleMatrix 0.0005)
+            renderText font shaderErrors (0,0) (planeMVP !*! translateMatrix (V3 (-0.5) 0.5 0))
         
         swapBuffers win
 

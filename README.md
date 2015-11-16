@@ -18,4 +18,4 @@ GL livecoding text editor in Haskell
 [x] Key repeat support
 [x] Copy/paste support
 
-[ ] Store cursor pos for halive usage
+[x] Store cursor pos for halive usage
