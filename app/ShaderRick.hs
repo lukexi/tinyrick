@@ -33,9 +33,8 @@ data ShaderPlaneUniforms = ShaderPlaneUniforms
 type RickID = Int
 
 data TinyRick = TinyRick
-  { _trBuffer  :: Buffer
+  { _trBuffer  :: TextBuffer
   , _trPose    :: Pose GLfloat
-  , _trFont    :: Font
   , _trShape   :: IO (Shape ShaderPlaneUniforms, String)
   , _trScroll  :: GLfloat
   }
@@ -80,8 +79,8 @@ main = do
             vertShaderPath = "app/geo.vert"
         getPlane <- liftIO $ shaderRecompiler vertShaderPath fragShaderPath (makeShape planeGeo)
 
-        buffer <- bufferFromFile fragShaderPath
-        appRicks . at i ?= TinyRick buffer pose font getPlane 0
+        buffer <- bufferFromFile font fragShaderPath
+        appRicks . at i ?= TinyRick buffer pose getPlane 0
 
         appActiveRickID .= i
 
@@ -115,15 +114,22 @@ mainLoop win events = do
           -- appRicks . ix activeRickID . trScroll .= 0
 
         -- Pass events to the active rickID
-        handleBufferEvent win e (appRicks . ix activeRickID . trBuffer)
+        handleTextBufferEvent win e (appRicks . ix activeRickID . trBuffer)
 
         -- Continuously save the file
         let save = do
               persistState 1
-              maybe (return ()) saveBuffer =<< preuse (appRicks . ix activeRickID . trBuffer)
+              maybeBuffer <- preuse (appRicks . ix activeRickID . trBuffer)
+              forM_ maybeBuffer $ \buffer -> do 
+                updateIndicesAndOffsets buffer
+                saveTextBuffer          buffer
         onChar e $ \_ -> save
         onKey  e Key'Enter     $ save
         onKey  e Key'Backspace $ save
+        onKey  e Key'Up        $ save
+        onKey  e Key'Down      $ save
+        onKey  e Key'Left      $ save
+        onKey  e Key'Right     $ save
     
     immutably $ do
         -- Clear the framebuffer
@@ -144,7 +150,7 @@ mainLoop win events = do
               planeMVP     = mvp !*! translateMatrix (V3 0.5 0 0)
               textMVP      = mvp !*! translateMatrix (V3 (-1) (0.5 - scroll*0.01 + 1) 0)
               buffer       = rick ^. trBuffer
-              font         = rick ^. trFont
+              font         = bufFont buffer
               scroll       = rick ^. trScroll
 
           (shape, shaderErrors) <- liftIO (rick ^. trShape)

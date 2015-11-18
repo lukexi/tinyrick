@@ -12,29 +12,29 @@ import Control.Lens.Extra
 import Control.Monad
 import Control.Monad.State
 
-import TinyRick.Buffer
+import Graphics.GL.Freetype
 
 
-bufferFromFile :: MonadIO m => FilePath -> m Buffer
-bufferFromFile filePath = liftIO $ do
+bufferFromFile :: MonadIO m => Font -> FilePath -> m TextBuffer
+bufferFromFile font filePath = liftIO $ do
   text <- readFile filePath
-  return $ bufferFromString filePath text
+  return $ textBufferFromString font filePath text
 
-saveBuffer :: (MonadIO m) => Buffer -> m ()
-saveBuffer buffer = do
+saveTextBuffer :: (MonadIO m) => TextBuffer -> m ()
+saveTextBuffer buffer = do
   liftIO $ putStrLn $ "Saving " ++ bufPath buffer ++ "..."
-  liftIO $ writeFile (bufPath buffer) (stringFromBuffer buffer)
+  liftIO $ writeFile (bufPath buffer) (stringFromTextBuffer buffer)
 
-handleBufferEvent :: (MonadState s m, MonadIO m) => Window -> Event -> (Traversal' s Buffer) -> m ()
-handleBufferEvent win e bufferLens = do
+handleTextBufferEvent :: (MonadState s m, MonadIO m) => Window -> Event -> (Traversal' s TextBuffer) -> m ()
+handleTextBufferEvent win e bufferLens = do
   superIsDown <- (== KeyState'Pressed) <$> getKey win Key'LeftSuper
   -- shiftIsDown <- (== KeyState'Pressed) <$> getKey win Key'LeftShift
   if  | superIsDown -> do
-          onKeyDown e Key'S      $ maybe (return ()) saveBuffer =<< preuse bufferLens
+          onKeyDown e Key'S      $ maybe (return ()) saveTextBuffer =<< preuse bufferLens
           onKeyDown e Key'C      $ do
-            mBuffer <- preuse bufferLens
-            forM_ mBuffer $ \buffer -> 
-              setClipboardString win (selectionFromBuffer buffer)
+            mTextBuffer <- preuse bufferLens
+            forM_ mTextBuffer $ \buffer -> 
+              setClipboardString win (selectionFromTextBuffer buffer)
           onKeyDown e Key'V      $ do
             mString <- getClipboardString win
             forM_ mString $ \string -> 

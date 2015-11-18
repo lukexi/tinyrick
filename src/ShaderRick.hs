@@ -4,8 +4,8 @@ module ShaderRick where
 import Graphics.GL.Pal
 import Data.IORef
 
-import TinyRick.Render
-import TinyRick.Buffer
+import Graphics.GL.Freetype
+
 shaderRecompiler :: FilePath -> FilePath -> (Program -> IO r) -> IO (IO (r, String))
 shaderRecompiler vertShaderPath fragShaderPath makeResult = do
 

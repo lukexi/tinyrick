@@ -29,8 +29,7 @@ type RickID = Int
 
 data TinyRick = TinyRick
   { _trPose   :: Pose GLfloat
-  , _trBuffer :: Buffer
-  , _trFont   :: Font
+  , _trBuffer :: TextBuffer
   }
 makeLenses ''TinyRick
 
@@ -67,8 +66,8 @@ main = do
       forM_ (zip [0..] files) $ \(i, filePath) -> do
         let position = V3 (-8 + fromIntegral i * 5) 6 (-11)
             pose = newPose & posPosition .~ position
-        buffer <- bufferFromFile filePath
-        appRicks . at i ?= TinyRick pose buffer font
+        buffer <- bufferFromFile font filePath
+        appRicks . at i ?= TinyRick pose buffer
       whileWindow win $ mainLoop win events
 
 mainLoop :: (MonadState AppState m, MonadIO m) => Window -> Events -> m ()
@@ -86,7 +85,9 @@ mainLoop win events = do
         onKey e Key'Tab rotateActiveRick
 
         -- Pass events to the active rickID
-        handleBufferEvent win e (appRicks . ix activeRickID . trBuffer)
+        handleTextBufferEvent win e (appRicks . ix activeRickID . trBuffer)
+        maybeBuffer <- preuse (appRicks . ix activeRickID . trBuffer)
+        forM_ maybeBuffer updateIndicesAndOffsets
     
     immutably $ do
         -- Clear the framebuffer
@@ -103,7 +104,7 @@ mainLoop win events = do
           let model44      = (transformationFromPose (rotateBy rot (rick ^. trPose)))
               mvp          = projection44 !*! view44 !*! model44
               buffer = rick ^. trBuffer
-              font   = rick ^. trFont
+              font   = bufFont buffer
           renderText font (bufText buffer) (bufSelection buffer) mvp
         
         swapBuffers win
