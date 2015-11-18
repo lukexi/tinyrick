@@ -16,7 +16,6 @@ import Control.Monad.State
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Time
-import Data.IORef
 
 import Halive.Utils
 
@@ -56,8 +55,8 @@ main = do
 
     (win, events) <- reacquire 0 $ createWindow "Tiny Rick" 1024 768
 
-    glyphQuadProg <- createShaderProgram "src/TinyRick/glyphQuad.vert" "src/TinyRick/glyphQuad.frag"
-    font          <- createFont fontFile 30 glyphQuadProg
+    glyphProg <- createShaderProgram "src/TinyRick/glyph.vert" "src/TinyRick/glyph.frag"
+    font      <- createFont fontFile 30 glyphProg
 
     -- planeGeometry size normal up subdivisions
     planeGeo <- planeGeometry (V2 1 1) (V3 0 0 1) (V3 0 1 0) 1
@@ -79,7 +78,7 @@ main = do
             -- position = V3 (-8 + fromIntegral i * 5) 6 (-11)
             position = (V3 0 0 (-1.1))
             vertShaderPath = "app/geo.vert"
-        getPlane <- liftIO $ makeRecompiler vertShaderPath fragShaderPath planeGeo 
+        getPlane <- liftIO $ shaderRecompiler vertShaderPath fragShaderPath (makeShape planeGeo)
 
         buffer <- bufferFromFile fragShaderPath
         appRicks . at i ?= TinyRick buffer pose font getPlane 0
@@ -91,26 +90,6 @@ main = do
       whileWindow win $ 
         mainLoop win events 
 
-makeRecompiler :: Data u => FilePath -> FilePath -> Geometry -> IO (IO (Shape u, String))
-makeRecompiler vertShaderPath fragShaderPath planeGeo  = do
-
-  (shader, result) <- createShaderProgram' vertShaderPath fragShaderPath
-  shape <- makeShape planeGeo shader
-  shapeRef <- newIORef (shape, result)
-
-  lookForChange <- watchFiles [vertShaderPath, fragShaderPath]
-
-  return $ do
-    lookForChange >>= \case
-      Nothing -> return ()
-      Just _ -> do
-        (newShader, newResult) <- createShaderProgram' vertShaderPath fragShaderPath
-        goodShape <- if null newResult 
-          then makeShape planeGeo newShader 
-          else fst <$> readIORef shapeRef
-        writeIORef shapeRef (goodShape, newResult)
-
-    readIORef shapeRef
 
 
 mainLoop :: (MonadState AppState m, MonadIO m) => Window -> Events -> m ()
