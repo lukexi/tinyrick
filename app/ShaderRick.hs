@@ -43,9 +43,9 @@ data TinyRick = TinyRick
 makeLenses ''TinyRick
 
 data AppState = AppState 
-    { _appRicks        :: Map RickID TinyRick
-    , _appActiveRickID :: RickID
-    }
+  { _appRicks        :: Map RickID TinyRick
+  , _appActiveRickID :: RickID
+  }
 makeLenses ''AppState
 
 newAppState :: AppState
