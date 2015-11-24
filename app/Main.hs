@@ -47,7 +47,7 @@ main = do
 
     (win, events) <- reacquire 0 $ createWindow "Tiny Rick" 1024 768
 
-    glyphQuadProg <- createShaderProgram "src/TinyRick/glyphQuad.vert" "src/TinyRick/glyphQuad.frag"
+    glyphQuadProg <- createShaderProgram "src/TinyRick/glyph.vert" "src/TinyRick/glyph.frag"
     font          <- createFont fontFile 30 glyphQuadProg
 
     glClearColor 0.1 0.1 0.1 1
@@ -58,8 +58,8 @@ main = do
     glBlendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
     
     let files = [ "app/Main.hs"
-                , "src/TinyRick/glyphQuad.vert"
-                , "src/TinyRick/glyphQuad.frag"
+                , "src/TinyRick/glyph.vert"
+                , "src/TinyRick/glyph.frag"
                 ]
 
     void . flip runStateT newAppState $ do
