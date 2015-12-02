@@ -20,7 +20,6 @@ import Data.Time
 import Halive.Utils
 
 import TinyRick
-import Data.Maybe
 
 fontFile :: FilePath
 fontFile = "fonts/SourceCodePro-Regular.ttf"
@@ -67,22 +66,19 @@ main = do
     glEnable    GL_BLEND
     glBlendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
     
-    let shaders = [ "app/shader.frag"
+    let shaders = [ "app/shader-simple.frag"
                   ]
 
     initialState <- reacquire 1 $ flip execStateT newAppState $ do
       -- Create an editor instance for each fragment shader
       forM_ (zip [0..] shaders) $ \(i, fragShaderPath) -> do
         let pose = newPose & posPosition .~ position
-            -- position = V3 (-8 + fromIntegral i * 5) 6 (-11)
-            position = (V3 0 0 (-1.1))
+            position = (V3 0 0 (-11))
             vertShaderPath = "app/geo.vert"
-        getPlane <- liftIO $ shaderRecompiler vertShaderPath fragShaderPath (makeShape planeGeo)
+        getPlane <- shaderRecompiler vertShaderPath fragShaderPath (makeShape planeGeo)
 
         buffer <- bufferFromFile font fragShaderPath
         appRicks . at i ?= TinyRick buffer pose getPlane 0
-
-        appActiveRickID .= i
 
     void . flip runStateT initialState $ do
 
@@ -97,7 +93,7 @@ mainLoop win events = do
 
     (x,y,w,h) <- getWindowViewport win
     glViewport x y w h
-    projection44 <- getWindowProjection win 45 0.01 1000
+    proj44 <- getWindowProjection win 45 0.01 1000
 
     -- Get mouse/keyboard/OS events from GLFW
     activeRickID <- use appActiveRickID
@@ -105,7 +101,8 @@ mainLoop win events = do
         closeOnEscape win e
         
         -- Switch which rick has focus on Tab
-        onKey e Key'Tab rotateActiveRick
+        ricks <- use appRicks
+        onKey e Key'Tab $ appActiveRickID %= (`mod` Map.size ricks) . succ
 
         -- Scroll the active rick
         onScroll e $ \_ scrollY -> do
@@ -137,41 +134,34 @@ mainLoop win events = do
 
         -- Render our scene
         let view44 = viewMatrixFromPose newPose
+            projView44   = proj44 !*! view44
         
         ricks <- use appRicks
         forM_ (Map.toList ricks) $ \(rickID, rick) -> do
-          let rot = axisAngle (V3 0 1 0) $ if rickID /= activeRickID 
-                                              then 0.5
-                                              else 0.0
-              shift = V3 0 0 (-0.1)
-              model44      = transformationFromPose . shiftBy shift . rotateBy rot $ rick ^. trPose
-              projView44   = projection44 !*! view44
-              mvp          = projView44 !*! model44
-              planeMVP     = mvp !*! translateMatrix (V3 0.5 0 0)
-              textMVP      = mvp !*! translateMatrix (V3 (-1) (0.5 - scroll*0.01 + 1) 0)
-              buffer       = rick ^. trBuffer
-              font         = bufFont buffer
-              scroll       = rick ^. trScroll
+            let shift        = V3 0 0 (-0.1)
+                model44      = transformationFromPose . shiftBy shift $ rick ^. trPose
+                mvp          = projView44 !*! model44
+                planeMVP     = mvp !*! translateMatrix (V3 0.5 0 10)
+                textMVP      = mvp !*! translateMatrix (V3 (-8) (0.5 - scroll*0.01 + 1) 0)
+                font         = bufFont buffer
+                buffer       = rick ^. trBuffer
+                scroll       = rick ^. trScroll
 
-          (shape, shaderErrors) <- liftIO (rick ^. trShape)
-          withShape shape $ do
-            let ShaderPlaneUniforms{..} = sUniforms shape
-            uniformM44 uMVP planeMVP
-            -- Pass time uniform
-            uniformF uTime =<< realToFrac . utctDayTime <$> liftIO getCurrentTime
-            drawShape
+            (shape, shaderErrors) <- liftIO (rick ^. trShape)
 
-          renderText font (bufText buffer) (bufSelection buffer) textMVP
-          when (not (null shaderErrors)) $ do
-            renderText font shaderErrors (0,0) (planeMVP !*! translateMatrix (V3 (-0.5) 0.5 0))
+            -- Draw the Shader plane
+            withShape shape $ do
+              let ShaderPlaneUniforms{..} = sUniforms shape
+              uniformM44 uMVP planeMVP
+              -- Pass time uniform
+              uniformF uTime =<< realToFrac . utctDayTime <$> liftIO getCurrentTime
+              drawShape
+
+            -- Draw the source code
+            renderText font (bufText buffer) (bufSelection buffer) textMVP
+
+            -- Draw any errors
+            when (not (null shaderErrors)) $ do
+              renderText font shaderErrors (0,0) (planeMVP !*! translateMatrix (V3 (-0.5) 0.5 0))
         
         swapBuffers win
-
-rotateActiveRick :: MonadState AppState m => m ()
-rotateActiveRick = do
-  activeRickID <- use appActiveRickID
-  ricks        <- use appRicks
-  let !lastIndex  = fromMaybe 0 $ Map.lookupIndex activeRickID ricks
-      !newIndex   = (lastIndex + 1) `mod` Map.size ricks
-      (!k, _)     = Map.elemAt newIndex ricks
-  appActiveRickID .= k

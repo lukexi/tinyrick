@@ -3,11 +3,10 @@ module ShaderRick where
 
 import Graphics.GL.Pal
 import Data.IORef
+import Control.Monad.Trans
 
-import Graphics.GL.Freetype
-
-shaderRecompiler :: FilePath -> FilePath -> (Program -> IO r) -> IO (IO (r, String))
-shaderRecompiler vertShaderPath fragShaderPath makeResult = do
+shaderRecompiler :: MonadIO m => FilePath -> FilePath -> (Program -> IO r) -> m (IO (r, String))
+shaderRecompiler vertShaderPath fragShaderPath makeResult = liftIO $ do
 
   (shader, anyError) <- createShaderProgram' vertShaderPath fragShaderPath
   result          <- makeResult shader
