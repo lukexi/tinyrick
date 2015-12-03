@@ -61,6 +61,40 @@ executable shaderrick
                      , time
   default-language:    Haskell2010
 
+executable texturerick
+  hs-source-dirs:      app
+  main-is:             TextureRick.hs
+  ghc-options:         -Wall -O2 -threaded -rtsopts -with-rtsopts=-N
+  build-depends:       base
+                     , tinyrick
+                     , gl-pal
+                     , glfw-pal
+                     , freetype-gl-mini
+                     , halive
+                     , lens-extra
+                     , mtl
+                     , random
+                     , containers
+                     , time
+  default-language:    Haskell2010
+
+executable editorrick
+  hs-source-dirs:      app
+  main-is:             EditorRick.hs
+  ghc-options:         -Wall -O2 -threaded -rtsopts -with-rtsopts=-N
+  build-depends:       base
+                     , tinyrick
+                     , gl-pal
+                     , glfw-pal
+                     , freetype-gl-mini
+                     , halive
+                     , lens-extra
+                     , mtl
+                     , random
+                     , containers
+                     , time
+  default-language:    Haskell2010
+
 source-repository head
   type:     git
   location: https://github.com/lukexi/tinyrick

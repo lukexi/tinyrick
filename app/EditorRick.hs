@@ -55,7 +55,7 @@ main = do
     (win, events) <- reacquire 0 $ createWindow "Tiny Rick" 1024 768
 
     glyphProg <- createShaderProgram "src/TinyRick/glyph.vert" "src/TinyRick/glyph.frag"
-    font      <- createFont fontFile 30 glyphProg
+    font      <- createFont fontFile 100 glyphProg
 
     -- planeGeometry size normal up subdivisions
     planeGeo <- planeGeometry (V2 1 1) (V3 0 0 1) (V3 0 1 0) 1
@@ -71,10 +71,11 @@ main = do
                   ]
 
     initialState <- reacquire 1 $ flip execStateT newAppState $ do
+    -- initialState <- flip execStateT newAppState $ do
       -- Create an editor instance for each fragment shader
       forM_ (zip [0..] shaders) $ \(i, fragShaderPath) -> do
         let pose = newPose & posPosition .~ position
-            position = (V3 0 0 (-11))
+            position = (V3 0 0 (-1))
             vertShaderPath = "app/geo.vert"
         getPlane <- shaderRecompiler vertShaderPath fragShaderPath (makeShape planeGeo)
 
@@ -109,7 +110,6 @@ mainLoop win events = do
         onScroll e $ \_ scrollY -> do
           appRicks . ix activeRickID . trScroll %= \s ->
             min 100 (max (-1000) (s + scrollY))
-          -- appRicks . ix activeRickID . trScroll .= 0
 
         -- Pass events to the active rickID
         handleTextBufferEvent win e (appRicks . ix activeRickID . trBuffer)
@@ -139,16 +139,15 @@ mainLoop win events = do
         
         ricks <- use appRicks
         forM_ (Map.toList ricks) $ \(rickID, rick) -> do
-            let shift        = V3 0 0 (-0.1)
-                model44      = transformationFromPose . shiftBy shift $ rick ^. trPose
+            let model44      = transformationFromPose (rick ^. trPose)
                 mvp          = projView44 !*! model44
-                planeMVP     = mvp !*! translateMatrix (V3 0.5 0 10)
-                textMVP      = mvp !*! translateMatrix (V3 (-8) (0.5 - scroll*0.01 + 1) 0)
+                planeMVP     = mvp
+                textMVP      = mvp !*! translateMatrix (V3 (-0.5) (0.5) 0)
                 font         = bufFont buffer
                 buffer       = rick ^. trBuffer
                 scroll       = rick ^. trScroll
 
-            (shape, shaderErrors) <- liftIO (rick ^. trShape)
+            (shape, _shaderErrors) <- liftIO (rick ^. trShape)
 
             -- Draw the Shader plane
             withShape shape $ do
@@ -159,11 +158,31 @@ mainLoop win events = do
                 drawShape
 
             -- Draw the source code
-            renderText font (bufText buffer) (bufSelection buffer) textMVP
-
-            -- Draw any errors
-            when (not (null shaderErrors)) $ do
-
-                renderText font shaderErrors (0,0) (planeMVP !*! translateMatrix (V3 (-1) 0.5 0) !*! scaleMatrix 0.1)
+            renderText' font (bufText buffer) (bufSelection buffer) textMVP
         
         swapBuffers win
+
+
+renderText' :: (Foldable f, MonadIO m) 
+            => Font -> f Char -> (Int, Int) -> M44 GLfloat -> m ()
+renderText' Font{..} string (selStart, selEnd) mvp = do
+    useProgram fntShader
+    glBindTexture GL_TEXTURE_2D (unTextureID fntTextureID)
+
+    let GlyphUniforms{..} = fntUniforms
+        -- Ensures the characters are always the same 
+        -- size no matter what point size was specified
+        resolutionCompensationScale = realToFrac (1 / fntPointSize / charWidth)
+        -- Also scale by the width of a wide character
+        charWidth = gmAdvanceX (glyMetrics (fntGlyphForChar '_'))
+    uniformM44 uMVP     (mvp !*! scaleMatrix resolutionCompensationScale)
+    uniformI   uTexture 0
+    uniformV3  uColor   (V3 1 1 1)
+
+
+    let numVertices  = 4
+        -- Add 1 to ensure we still render the cursor
+        numInstances = fromIntegral (length string + 1)
+    withVAO fntVAO $ 
+      glDrawArraysInstanced GL_TRIANGLE_STRIP 0 numVertices numInstances
+    return ()
