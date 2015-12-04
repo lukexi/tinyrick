@@ -88,10 +88,7 @@ main = do
         mainLoop win events
 
 
-worldPointToModelPoint' model worldPoint = pointOnModel
-  where
-    invModel     = inv44 model
-    pointOnModel = normalizePoint (invModel !* point worldPoint)
+
 
 correctionMatrixForFont Font{..} = correctedMVP
   where
