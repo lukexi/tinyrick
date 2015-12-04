@@ -55,7 +55,7 @@ main = do
     (win, events) <- reacquire 0 $ createWindow "Tiny Rick" 1024 768
 
     glyphProg <- createShaderProgram "src/TinyRick/glyph.vert" "src/TinyRick/glyph.frag"
-    font      <- createFont fontFile 100 glyphProg
+    font      <- createFont fontFile 50 glyphProg
 
     -- planeGeometry size normal up subdivisions
     planeGeo <- planeGeometry (V2 1 1) (V3 0 0 1) (V3 0 1 0) 1
@@ -70,12 +70,12 @@ main = do
     let shaders = [ "app/shader-simple.frag"
                   ]
 
-    initialState <- reacquire 1 $ flip execStateT newAppState $ do
-    -- initialState <- flip execStateT newAppState $ do
+    -- initialState <- reacquire 1 $ flip execStateT newAppState $ do
+    initialState <- flip execStateT newAppState $ do
       -- Create an editor instance for each fragment shader
       forM_ (zip [0..] shaders) $ \(i, fragShaderPath) -> do
-        let pose = newPose & posPosition .~ position
-            position = (V3 0 0 (-1))
+        let position = (V3 0 0 (-1))
+            pose = newPose & posPosition .~ position
             vertShaderPath = "app/geo.vert"
         getPlane <- shaderRecompiler vertShaderPath fragShaderPath (makeShape planeGeo)
 
@@ -88,10 +88,26 @@ main = do
         mainLoop win events
 
 
+worldPointToModelPoint' model worldPoint = pointOnModel
+  where
+    invModel     = inv44 model
+    pointOnModel = normalizePoint (invModel !* point worldPoint)
+
+correctionMatrixForFont Font{..} = correctedMVP
+  where
+    -- Ensures the characters are always the same 
+    -- size no matter what point size was specified
+    resolutionCompensationScale = realToFrac (1 / fntPointSize / charWidth)
+    -- Also scale by the width of a wide character
+    charWidth = gmAdvanceX (glyMetrics (fntGlyphForChar '_'))
+    correctedMVP = 
+                    translateMatrix (V3 (-0.5) (0.5) 0) 
+               !*! 
+                    scaleMatrix resolutionCompensationScale
 
 mainLoop :: (MonadState AppState m, MonadIO m) => Window -> Events -> m ()
 mainLoop win events = do
-    persistState 1
+    -- persistState 1
 
     (x,y,w,h) <- getWindowViewport win
     glViewport x y w h
@@ -101,9 +117,47 @@ mainLoop win events = do
     activeRickID <- use appActiveRickID
     processEvents events $ \e -> do
         closeOnEscape win e
+        ricks <- use appRicks
+
+        -- Allow picking
+        onMouseDown e $ \_ -> do
+            ray <- cursorPosToWorldRay win proj44 newPose
+            let rayDir = directionFromRay ray
+            forM_ (Map.toList ricks) $ \(rickID, rick) -> do
+                let model44      = transformationFromPose (rick ^. trPose)
+                    textModel44  = model44 !*! correctionMatrixForFont font
+                    font         = bufFont buffer
+                    buffer       = rick ^. trBuffer
+                    aabb         = (0, V3 1 (-1) 0)
+                    intersection = rayOBBIntersection ray aabb textModel44
+
+                case intersection of
+                    Nothing -> return ()
+                    Just distance -> do
+                        let worldPoint = rayDir ^* distance
+                            modelPoint = worldPointToModelPoint' textModel44 worldPoint
+                            (indices, offsets) = calculateIndicesAndOffsets buffer
+                            (cursX, cursY) = (modelPoint ^. _x, modelPoint ^. _y)
+                            hits = filter (\(i, V2 x y) -> 
+                                           cursX > x 
+                                        && cursX < (x + fntPointSize font) 
+                                        && cursY > y 
+                                        && cursY < (y + fntPointSize font)) (zip [0..] offsets)
+                            numChars = length offsets
+                        forM_ hits $ \(i, _) -> do
+                            let realIndex = numChars - i
+                            appRicks . ix rickID . trBuffer %= \b ->
+                                updateCurrentColumn (
+                                    b {bufSelection = (realIndex, realIndex)}
+                                    )
+                            mapM_ updateIndicesAndOffsets =<< (preuse (appRicks . ix rickID . trBuffer))
+                        printIO hits
+                        putStrLnIO $ "World: " ++ show worldPoint
+                        putStrLnIO $ "Model: " ++ show modelPoint
+                printIO $ intersection
+
         
         -- Switch which rick has focus on Tab
-        ricks <- use appRicks
         onKey e Key'Tab $ appActiveRickID %= (`mod` Map.size ricks) . succ
 
         -- Scroll the active rick
@@ -141,8 +195,6 @@ mainLoop win events = do
         forM_ (Map.toList ricks) $ \(rickID, rick) -> do
             let model44      = transformationFromPose (rick ^. trPose)
                 mvp          = projView44 !*! model44
-                planeMVP     = mvp
-                textMVP      = mvp !*! translateMatrix (V3 (-0.5) (0.5) 0)
                 font         = bufFont buffer
                 buffer       = rick ^. trBuffer
                 scroll       = rick ^. trScroll
@@ -152,30 +204,29 @@ mainLoop win events = do
             -- Draw the Shader plane
             withShape shape $ do
                 let ShaderPlaneUniforms{..} = sUniforms shape
-                uniformM44 uMVP planeMVP
+                uniformM44 uMVP mvp
                 -- Pass time uniform
                 uniformF uTime =<< realToFrac . utctDayTime <$> liftIO getCurrentTime
                 drawShape
 
             -- Draw the source code
-            renderText' font (bufText buffer) (bufSelection buffer) textMVP
+            renderText' font (bufText buffer) (bufSelection buffer) mvp
         
         swapBuffers win
 
 
+
+
 renderText' :: (Foldable f, MonadIO m) 
             => Font -> f Char -> (Int, Int) -> M44 GLfloat -> m ()
-renderText' Font{..} string (selStart, selEnd) mvp = do
+renderText' font@Font{..} string (selStart, selEnd) mvp = do
     useProgram fntShader
     glBindTexture GL_TEXTURE_2D (unTextureID fntTextureID)
 
     let GlyphUniforms{..} = fntUniforms
-        -- Ensures the characters are always the same 
-        -- size no matter what point size was specified
-        resolutionCompensationScale = realToFrac (1 / fntPointSize / charWidth)
-        -- Also scale by the width of a wide character
-        charWidth = gmAdvanceX (glyMetrics (fntGlyphForChar '_'))
-    uniformM44 uMVP     (mvp !*! scaleMatrix resolutionCompensationScale)
+        correctedMVP = mvp !*! correctionMatrixForFont font
+                           
+    uniformM44 uMVP     correctedMVP
     uniformI   uTexture 0
     uniformV3  uColor   (V3 1 1 1)
 

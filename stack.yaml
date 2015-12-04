@@ -7,4 +7,4 @@ packages:
 - '../halive'
 - '../lens-extra'
 - '../freetype-gl-mini'
-resolver: nightly-2015-11-03
+resolver: nightly-2015-12-03
