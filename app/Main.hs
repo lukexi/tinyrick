@@ -17,7 +17,6 @@ import qualified Data.Map as Map
 import Halive.Utils
 
 import TinyRick
-import Data.Maybe
 
 fontFile :: FilePath
 fontFile = "fonts/SourceCodePro-Regular.ttf"

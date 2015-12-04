@@ -95,6 +95,24 @@ executable editorrick
                      , time
   default-language:    Haskell2010
 
+executable vrrick
+  hs-source-dirs:      app
+  main-is:             VRRick.hs
+  ghc-options:         -Wall -O2 -threaded -rtsopts -with-rtsopts=-N
+  build-depends:       base
+                     , tinyrick
+                     , gl-pal
+                     , glfw-pal
+                     , freetype-gl-mini
+                     , vr-pal
+                     , halive
+                     , lens-extra
+                     , mtl
+                     , random
+                     , containers
+                     , time
+  default-language:    Haskell2010
+
 source-repository head
   type:     git
   location: https://github.com/lukexi/tinyrick

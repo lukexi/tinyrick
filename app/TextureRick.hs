@@ -13,8 +13,6 @@ import Graphics.GL.Freetype
 import Control.Lens.Extra
 import Control.Monad
 import Control.Monad.State
-import           Data.Map (Map)
-import qualified Data.Map as Map
 import Data.Time
 
 import Halive.Utils
@@ -61,7 +59,13 @@ main = do
 getNow :: MonadIO m => m GLfloat
 getNow = realToFrac . utctDayTime <$> liftIO getCurrentTime
 
--- mainLoop :: (MonadIO m) => Window -> Events -> (IO (Shape ShaderPlaneUniforms, String)) -> TextureObject -> m ()
+mainLoop :: MonadIO m 
+         => Window
+         -> Events
+         -> IO (Shape ShaderPlaneUniforms, t)
+         -> TextureObject
+         -> GLfloat
+         -> m ()
 mainLoop win events getShape texture startTime = do
 
     (x,y,w,h) <- getWindowViewport win
