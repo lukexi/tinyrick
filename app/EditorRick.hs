@@ -132,7 +132,7 @@ mainLoop win events = do
                     Nothing -> return ()
                     Just distance -> do
                         let worldPoint = rayDir ^* distance
-                            modelPoint = worldPointToModelPoint' textModel44 worldPoint
+                            modelPoint = worldPointToModelPoint textModel44 worldPoint
                             (indices, offsets) = calculateIndicesAndOffsets buffer
                             (cursX, cursY) = (modelPoint ^. _x, modelPoint ^. _y)
                             hits = filter (\(i, V2 x y) -> 
