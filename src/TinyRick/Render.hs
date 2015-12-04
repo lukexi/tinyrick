@@ -54,3 +54,19 @@ handleTextBufferEvent win e bufferLens = do
 
             onKeyWithMods e [ModKeyShift] Key'Left  $ bufferLens %= selectLeft
             onKeyWithMods e [ModKeyShift] Key'Right $ bufferLens %= selectRight
+
+    -- Continuously save the file
+    let updateBuffer save = do
+          maybeBuffer <- preuse bufferLens
+
+          forM_ maybeBuffer $ \buffer -> do 
+
+            updateIndicesAndOffsets buffer
+            when save $ saveTextBuffer buffer
+    onChar e         $ \_ -> updateBuffer True
+    onKey  e Key'Enter     $ updateBuffer True
+    onKey  e Key'Backspace $ updateBuffer True
+    onKey  e Key'Up        $ updateBuffer False
+    onKey  e Key'Down      $ updateBuffer False
+    onKey  e Key'Left      $ updateBuffer False
+    onKey  e Key'Right     $ updateBuffer False

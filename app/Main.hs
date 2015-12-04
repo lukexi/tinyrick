@@ -105,7 +105,7 @@ mainLoop win events = do
                 mvp          = proj44 !*! view44 !*! model44
                 buffer = rick ^. trBuffer
                 font   = bufFont buffer
-            renderText font (bufText buffer) (bufSelection buffer) mvp
+            renderText font (V3 1 1 1) (bufText buffer) mvp
         
         swapBuffers win
 

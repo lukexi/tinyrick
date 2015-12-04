@@ -159,11 +159,11 @@ mainLoop win events = do
                 drawShape
 
             -- Draw the source code
-            renderText font (bufText buffer) (bufSelection buffer) textMVP
+            renderText font (V3 1 1 1) (bufText buffer) textMVP
 
             -- Draw any errors
             when (not (null shaderErrors)) $ do
 
-                renderText font shaderErrors (0,0) (planeMVP !*! translateMatrix (V3 (-1) 0.5 0) !*! scaleMatrix 0.1)
+                renderText font (V3 1 0.5 0.5) shaderErrors (planeMVP !*! translateMatrix (V3 (-1) 0.5 0) !*! scaleMatrix 0.1)
         
         swapBuffers win

@@ -59,8 +59,9 @@ main = do
     glyphProg <- createShaderProgram "src/TinyRick/glyph.vert" "src/TinyRick/glyph.frag"
     font      <- createFont fontFile 50 glyphProg
 
-    -- planeGeometry size normal up subdivisions
+    --                        size     normal     up         subdivisions
     planeGeo <- planeGeometry (V2 1 1) (V3 0 0 1) (V3 0 1 0) 1
+
     -- The vert shader to use for Shader planes
     let vertShaderPath = "app/geo.vert"
 
@@ -69,7 +70,6 @@ main = do
 
     glClearColor 0.0 0.1 0.0 1
     glEnable GL_DEPTH_TEST
-    --
 
     glEnable    GL_BLEND
     glBlendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
@@ -99,21 +99,9 @@ main = do
     void . flip runStateT initialState . whileWindow gpWindow $ 
         mainLoop vrPal getCubeShape
 
-correctionMatrixForFont :: Fractional a => Font -> M44 a
-correctionMatrixForFont Font{..} = correctedMVP
-  where
-    -- Ensures the characters are always the same 
-    -- size no matter what point size was specified
-    resolutionCompensationScale = realToFrac (1 / fntPointSize / charWidth)
-    -- Also scale by the width of a wide character
-    charWidth = gmAdvanceX (glyMetrics (fntGlyphForChar '_'))
-    correctedMVP = 
-                    translateMatrix (V3 (-0.5) (0.5) 0) 
-                !*! 
-                    scaleMatrix resolutionCompensationScale
 
--- mainLoop :: (MonadState AppState m, MonadIO m) => VRPal -> m ()
 
+mainLoop :: (MonadState AppState m, MonadIO m) => VRPal -> IO (Shape ShaderPlaneUniforms, String) -> m ()
 mainLoop vrPal@VRPal{..} getCubeShape = do
     persistState 1
 
@@ -128,80 +116,36 @@ mainLoop vrPal@VRPal{..} getCubeShape = do
         onMouseDown e $ \_ -> do
             winProj44 <- getWindowProjection gpWindow 45 0.1 1000
             ray <- cursorPosToWorldRay gpWindow winProj44 newPose
-            let rayDir = directionFromRay ray :: V3 GLfloat
             forM_ (Map.toList ricks) $ \(rickID, rick) -> do
-                let model44      = transformationFromPose (rick ^. trPose)
-                    textModel44  = model44 !*! correctionMatrixForFont font
-                    font         = bufFont buffer
-                    buffer       = rick ^. trBuffer
-                    aabb         = (0, V3 1 (-1) 0)
-                    intersection = rayOBBIntersection ray aabb textModel44
-
-                case intersection of
-                    Nothing -> return ()
-                    Just intersectionDistance -> do
-                        let worldPoint = rayDir ^* intersectionDistance
-                            modelPoint = worldPointToModelPoint textModel44 worldPoint
-                            (_indices, offsets) = calculateIndicesAndOffsets buffer
-                            (cursX, cursY) = (modelPoint ^. _x, modelPoint ^. _y)
-                            hits = filter (\(_i, V2 x y) -> 
-                                           cursX > x 
-                                        && cursX < (x + fntPointSize font) 
-                                        && cursY > y 
-                                        && cursY < (y + fntPointSize font)) (zip [0..] offsets)
-                            numChars = length offsets
-                        forM_ hits $ \(i, _) -> do
-                            let realIndex = numChars - i
-                            appRicks . ix rickID . trBuffer %= \b ->
-                                updateCurrentColumn (
-                                    b {bufSelection = (realIndex, realIndex)}
-                                    )
-                            mapM_ updateIndicesAndOffsets =<< (preuse (appRicks . ix rickID . trBuffer))
-                        printIO hits
-                        putStrLnIO $ "World: " ++ show worldPoint
-                        putStrLnIO $ "Model: " ++ show modelPoint
-                printIO $ intersection
+                let model44 = transformationFromPose (rick ^. trPose)
+                updatedBuffer <- castRayToBuffer ray model44 (rick ^. trBuffer) 
+                appRicks . ix rickID . trBuffer .= updatedBuffer
 
         
         -- Switch which rick has focus on Tab
         onKey e Key'Tab $ appActiveRickID %= (`mod` Map.size ricks) . succ
 
         -- Scroll the active rick
-        onScroll e $ \_ scrollY -> do
-          appRicks . ix activeRickID . trScroll %= \s ->
-            min 100 (max (-1000) (s + scrollY))
+        onScroll e $ \_ scrollY -> 
+            appRicks . ix activeRickID . trScroll %= \s ->
+                min 0 (max (-1000) (s + scrollY))
 
         -- Pass events to the active rickID
         handleTextBufferEvent gpWindow e (appRicks . ix activeRickID . trBuffer)
-
-        -- Continuously save the file
-        let updateBuffer save = do
-              maybeBuffer <- preuse (appRicks . ix activeRickID . trBuffer)
-
-              forM_ maybeBuffer $ \buffer -> do 
-
-                updateIndicesAndOffsets buffer
-                when save $ saveTextBuffer buffer
-        onChar e         $ \_ -> updateBuffer True
-        onKey  e Key'Enter     $ updateBuffer True
-        onKey  e Key'Backspace $ updateBuffer True
-        onKey  e Key'Up        $ updateBuffer False
-        onKey  e Key'Down      $ updateBuffer False
-        onKey  e Key'Left      $ updateBuffer False
-        onKey  e Key'Right     $ updateBuffer False
     
     let view44 = viewMatrixFromPose newPose
 
     immutably . renderWith vrPal view44 (glClear (GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT)) $ \proj44 eyeView44 -> do
         -- Render our scene
         let projView44   = proj44 !*! eyeView44
+        now <- realToFrac . utctDayTime <$> liftIO getCurrentTime
         
         (cubeShape,_) <- liftIO getCubeShape
         withShape cubeShape $
             forM_ hands $ \hand -> do
                 let ShaderPlaneUniforms{..} = sUniforms cubeShape
                 uniformM44 uMVP (projView44 !*! hand ^. hndMatrix !*! scaleMatrix 0.1)
-                uniformF uTime =<< realToFrac . utctDayTime <$> liftIO getCurrentTime
+                uniformF uTime now
                 drawShape
 
         ricks <- use appRicks
@@ -221,36 +165,13 @@ mainLoop vrPal@VRPal{..} getCubeShape = do
                     withShape shape $ do
                         let ShaderPlaneUniforms{..} = sUniforms shape
                         uniformM44 uMVP mvp
-                        -- Pass time uniform
-                        uniformF uTime =<< realToFrac . utctDayTime <$> liftIO getCurrentTime
+                        uniformF uTime now
                         drawShape
 
                     when (not (null shaderErrors)) $
-                        renderText' font (V3 1 0.5 0.5) (bufText buffer) (mvp !*! translateMatrix (V3 1 0 0))
+                        renderText font (V3 1 0.5 0.5) (bufText buffer) (mvp !*! translateMatrix (V3 1 0 0))
                 Nothing -> return ()
 
             -- Draw the source code
             let color = if rickID == activeRickID then V3 1 1 1 else V3 0.5 0.5 0.5
-            renderText' font color (bufText buffer) (mvp !*! translateMatrix (V3 0 (-1) 0))
-
-
-renderText' :: (Foldable f, MonadIO m) 
-            => Font -> V3 GLfloat -> f Char -> M44 GLfloat -> m ()
-renderText' font@Font{..} color string mvp = do
-    useProgram fntShader
-    glBindTexture GL_TEXTURE_2D (unTextureID fntTextureID)
-
-    let GlyphUniforms{..} = fntUniforms
-        correctedMVP = mvp !*! correctionMatrixForFont font
-                           
-    uniformM44 uMVP     correctedMVP
-    uniformI   uTexture 0
-    uniformV3  uColor   color
-
-
-    let numVertices  = 4
-        -- Add 1 to ensure we still render the cursor
-        numInstances = fromIntegral (length string + 1)
-    withVAO fntVAO $ 
-      glDrawArraysInstanced GL_TRIANGLE_STRIP 0 numVertices numInstances
-    return ()
+            renderText font color (bufText buffer) (mvp !*! translateMatrix (V3 0 (-1) 0))

@@ -4,7 +4,10 @@ GL livecoding text editor in Haskell
 
 # TODOs
 
-
+[ ] Fix buffer uniform clobbering
+[ ] Finish vive clicking
+[ ] Only save cursor position and active rick from old state
+    so we can update text buffers and positionings
 [ ] Scrolling (use fgPointSize * length (elemIndexL '\n') to find max height)
   [ ] Define maxHeight for text windows and clip outside of it
 
