@@ -5,6 +5,7 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TupleSections #-}
 
 import Graphics.GL.Pal
 import Graphics.VR.Pal
@@ -63,11 +64,12 @@ main = do
     -- The vert shader to use for Shader planes
     let vertShaderPath = "app/geo.vert"
 
-    cube     <- cubeGeometry (V3 1 1 1) (V3 1 1 1)
+    cubeGeo      <- cubeGeometry (V3 1 1 1) (V3 1 1 1)
+    getCubeShape <- shaderRecompiler vertShaderPath "app/shader-simple.frag" (makeShape cubeGeo)
 
-    glClearColor 0.1 0.1 0.1 1
+    glClearColor 0.0 0.1 0.0 1
     glEnable GL_DEPTH_TEST
-    glDisable GL_DEPTH_TEST
+    --
 
     glEnable    GL_BLEND
     glBlendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
@@ -76,16 +78,18 @@ main = do
                   , "app/VRRick.hs"
                   ]
 
-    -- initialState <- reacquire 1 $ flip execStateT newAppState $ do
-    initialState <- flip execStateT newAppState $ do
+    initialState <- reacquire 1 $ flip execStateT newAppState $ do
+    -- initialState <- flip execStateT newAppState $ do
         -- Create an editor instance for each fragment shader
         forM_ (zip [0..] shaders) $ \(i, filePath) -> do
-            let position = V3 (fromIntegral i) 3 (-1)
-                pose     = newPose & posPosition .~ position
             
-            getPlane <- if takeExtension filePath == ".frag"
-                then Just <$> shaderRecompiler vertShaderPath filePath (makeShape planeGeo)
-                else return Nothing
+            
+            (y, getPlane) <- if takeExtension filePath == ".frag"
+                then (1,) . Just <$> shaderRecompiler vertShaderPath filePath (makeShape planeGeo)
+                else return (7, Nothing)
+
+            let position = V3 (fromIntegral i + 1) y (-0.5)
+                pose     = newPose & posPosition .~ position
 
             buffer   <- bufferFromFile font filePath
             appRicks . at i ?= TinyRick buffer pose getPlane 0
@@ -93,7 +97,7 @@ main = do
 
     -- showHandKeyboard vrPal 
     void . flip runStateT initialState . whileWindow gpWindow $ 
-        mainLoop vrPal
+        mainLoop vrPal getCubeShape
 
 correctionMatrixForFont :: Fractional a => Font -> M44 a
 correctionMatrixForFont Font{..} = correctedMVP
@@ -108,11 +112,12 @@ correctionMatrixForFont Font{..} = correctedMVP
                 !*! 
                     scaleMatrix resolutionCompensationScale
 
-mainLoop :: (MonadState AppState m, MonadIO m) => VRPal -> m ()
-mainLoop vrPal@VRPal{..} = do
+-- mainLoop :: (MonadState AppState m, MonadIO m) => VRPal -> m ()
+
+mainLoop vrPal@VRPal{..} getCubeShape = do
     persistState 1
 
-    hands <- getHands vrPal
+    (hands, _) <- getHands vrPal
     -- Get mouse/keyboard/OS events from GLFW
     activeRickID <- use appActiveRickID
     processEvents gpEvents $ \e -> do
@@ -191,6 +196,14 @@ mainLoop vrPal@VRPal{..} = do
         -- Render our scene
         let projView44   = proj44 !*! eyeView44
         
+        (cubeShape,_) <- liftIO getCubeShape
+        withShape cubeShape $
+            forM_ hands $ \hand -> do
+                let ShaderPlaneUniforms{..} = sUniforms cubeShape
+                uniformM44 uMVP (projView44 !*! hand ^. hndMatrix !*! scaleMatrix 0.1)
+                uniformF uTime =<< realToFrac . utctDayTime <$> liftIO getCurrentTime
+                drawShape
+
         ricks <- use appRicks
         activeRickID <- use appActiveRickID
         forM_ (Map.toList ricks) $ \(rickID, rick) -> do
