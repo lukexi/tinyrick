@@ -29,6 +29,7 @@ library
   ghc-options:         -Wall -O2
 
 executable tinyrick
+  buildable: False
   hs-source-dirs:      app
   main-is:             Main.hs
   ghc-options:         -Wall -O2 -threaded -rtsopts -with-rtsopts=-N
@@ -45,6 +46,7 @@ executable tinyrick
   default-language:    Haskell2010
 
 executable shaderrick
+  buildable: False
   hs-source-dirs:      app
   main-is:             ShaderRick.hs
   ghc-options:         -Wall -O2 -threaded -rtsopts -with-rtsopts=-N
@@ -62,6 +64,7 @@ executable shaderrick
   default-language:    Haskell2010
 
 executable texturerick
+  buildable: False
   hs-source-dirs:      app
   main-is:             TextureRick.hs
   ghc-options:         -Wall -O2 -threaded -rtsopts -with-rtsopts=-N

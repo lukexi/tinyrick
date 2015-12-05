@@ -35,7 +35,7 @@ data ShaderPlaneUniforms = ShaderPlaneUniforms
 type RickID = Int
 
 data TinyRick = TinyRick
-  { _trBuffer  :: TextBuffer
+  { _trRenderer  :: TextRenderer
   , _trPose    :: Pose GLfloat
   , _trShape   :: Maybe (IO (Shape ShaderPlaneUniforms, String))
   , _trScroll  :: GLfloat
@@ -91,7 +91,7 @@ main = do
             let position = V3 (fromIntegral i + 1) y (-0.5)
                 pose     = newPose & posPosition .~ position
 
-            buffer   <- bufferFromFile font filePath
+            buffer   <- textRendererFromFile font filePath
             appRicks . at i ?= TinyRick buffer pose getPlane 0
 
 
@@ -118,8 +118,8 @@ mainLoop vrPal@VRPal{..} getCubeShape = do
             ray <- cursorPosToWorldRay gpWindow winProj44 newPose
             forM_ (Map.toList ricks) $ \(rickID, rick) -> do
                 let model44 = transformationFromPose (rick ^. trPose)
-                updatedBuffer <- castRayToBuffer ray model44 (rick ^. trBuffer) 
-                appRicks . ix rickID . trBuffer .= updatedBuffer
+                updatedBuffer <- castRayToBuffer ray (rick ^. trRenderer) model44
+                appRicks . ix rickID . trRenderer .= updatedBuffer
 
         
         -- Switch which rick has focus on Tab
@@ -131,7 +131,7 @@ mainLoop vrPal@VRPal{..} getCubeShape = do
                 min 0 (max (-1000) (s + scrollY))
 
         -- Pass events to the active rickID
-        handleTextBufferEvent gpWindow e (appRicks . ix activeRickID . trBuffer)
+        handleTextBufferEvent gpWindow e (appRicks . ix activeRickID . trRenderer)
     
     let view44 = viewMatrixFromPose newPose
 
@@ -153,8 +153,8 @@ mainLoop vrPal@VRPal{..} getCubeShape = do
         forM_ (Map.toList ricks) $ \(rickID, rick) -> do
             let model44      = transformationFromPose (rick ^. trPose)
                 mvp          = projView44 !*! model44
-                font         = bufFont buffer
-                buffer       = rick ^. trBuffer
+                font         = rick ^. trRenderer . txrFont
+                buffer       = rick ^. trRenderer . txrTextBuffer
                 _scroll      = rick ^. trScroll
 
             case rick ^. trShape of
@@ -168,10 +168,11 @@ mainLoop vrPal@VRPal{..} getCubeShape = do
                         uniformF uTime now
                         drawShape
 
-                    when (not (null shaderErrors)) $
-                        renderText font (V3 1 0.5 0.5) (bufText buffer) (mvp !*! translateMatrix (V3 1 0 0))
+                    when (not (null shaderErrors)) $ do
+                        renderer <- liftIO $ createTextRenderer font (textBufferFromString "" shaderErrors)
+                        renderText renderer (mvp !*! translateMatrix (V3 1 0 0)) (V3 1 0.5 0.5)
                 Nothing -> return ()
 
             -- Draw the source code
             let color = if rickID == activeRickID then V3 1 1 1 else V3 0.5 0.5 0.5
-            renderText font color (bufText buffer) (mvp !*! translateMatrix (V3 0 (-1) 0))
+            renderText (rick ^. trRenderer) (mvp !*! translateMatrix (V3 0 (-1) 0)) color

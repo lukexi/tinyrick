@@ -33,10 +33,10 @@ data ShaderPlaneUniforms = ShaderPlaneUniforms
 type RickID = Int
 
 data TinyRick = TinyRick
-  { _trBuffer  :: TextBuffer
-  , _trPose    :: Pose GLfloat
-  , _trShape   :: IO (Shape ShaderPlaneUniforms, String)
-  , _trScroll  :: GLfloat
+  { _trRenderer :: TextRenderer
+  , _trPose     :: Pose GLfloat
+  , _trShape    :: IO (Shape ShaderPlaneUniforms, String)
+  , _trScroll   :: GLfloat
   }
 makeLenses ''TinyRick
 
@@ -79,8 +79,8 @@ main = do
             vertShaderPath = "app/geo.vert"
         getPlane <- shaderRecompiler vertShaderPath fragShaderPath (makeShape planeGeo)
 
-        buffer <- bufferFromFile font fragShaderPath
-        appRicks . at i ?= TinyRick buffer pose getPlane 0
+        textRenderer <- textRendererFromFile font fragShaderPath
+        appRicks . at i ?= TinyRick textRenderer pose getPlane 0
 
     void . flip runStateT initialState $ do
 
@@ -107,8 +107,8 @@ mainLoop win events = do
             ray <- cursorPosToWorldRay win winProj44 newPose
             forM_ (Map.toList ricks) $ \(rickID, rick) -> do
                 let model44 = transformationFromPose (rick ^. trPose)
-                updatedBuffer <- castRayToBuffer ray model44 (rick ^. trBuffer)
-                appRicks . ix rickID . trBuffer .= updatedBuffer
+                updatedRenderer <- castRayToBuffer ray (rick ^. trRenderer) model44
+                appRicks . ix rickID . trRenderer .= updatedRenderer
 
         
         -- Switch which rick has focus on Tab
@@ -120,7 +120,7 @@ mainLoop win events = do
             min 100 (max (-1000) (s + scrollY))
 
         -- Pass events to the active rickID
-        handleTextBufferEvent win e (appRicks . ix activeRickID . trBuffer)
+        handleTextBufferEvent win e (appRicks . ix activeRickID . trRenderer)
     
     immutably $ do
         -- Clear the framebuffer
@@ -134,8 +134,8 @@ mainLoop win events = do
         forM_ (Map.toList ricks) $ \(rickID, rick) -> do
             let model44      = transformationFromPose (rick ^. trPose)
                 mvp          = projView44 !*! model44
-                font         = bufFont buffer
-                buffer       = rick ^. trBuffer
+                font         = rick ^. trRenderer . txrFont
+                buffer       = rick ^. trRenderer . txrTextBuffer
                 scroll       = rick ^. trScroll
 
             (shape, _shaderErrors) <- liftIO (rick ^. trShape)
@@ -149,6 +149,6 @@ mainLoop win events = do
                 drawShape
 
             -- Draw the source code
-            renderText font (V3 1 1 1) (bufText buffer) mvp
+            renderText (rick ^. trRenderer) mvp (V3 1 1 1)
         
         swapBuffers win

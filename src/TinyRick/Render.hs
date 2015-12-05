@@ -15,54 +15,55 @@ import Control.Monad.State
 import Graphics.GL.Freetype
 
 
-bufferFromFile :: MonadIO m => Font -> FilePath -> m TextBuffer
-bufferFromFile font filePath = liftIO $ do
+textRendererFromFile :: MonadIO m => Font -> FilePath -> m TextRenderer
+textRendererFromFile font filePath = liftIO $ do
     text <- readFile filePath
-    let buffer = textBufferFromString font filePath text
-    updateIndicesAndOffsets buffer
-    return buffer
+    createTextRenderer font (textBufferFromString filePath text)
 
 saveTextBuffer :: (MonadIO m) => TextBuffer -> m ()
 saveTextBuffer buffer = do
     liftIO $ putStrLn $ "Saving " ++ bufPath buffer ++ "..."
     liftIO $ writeFile (bufPath buffer) (stringFromTextBuffer buffer)
 
-handleTextBufferEvent :: (MonadState s m, MonadIO m) => Window -> Event -> (Traversal' s TextBuffer) -> m ()
-handleTextBufferEvent win e bufferLens = do
+handleTextBufferEvent :: forall s m. (MonadState s m, MonadIO m) 
+                      => Window -> Event -> (Traversal' s TextRenderer) -> m ()
+handleTextBufferEvent win e rendererLens = do
+    -- let bufferLens = rendererLens . txrTextBuffer :: (Traversal' s TextBuffer)
     superIsDown <- (== KeyState'Pressed) <$> getKey win Key'LeftSuper
     -- shiftIsDown <- (== KeyState'Pressed) <$> getKey win Key'LeftShift
     if  | superIsDown -> do
-            onKeyDown e Key'S      $ maybe (return ()) saveTextBuffer =<< preuse bufferLens
+            onKeyDown e Key'S      $ maybe (return ()) saveTextBuffer =<< preuse (rendererLens . txrTextBuffer)
             onKeyDown e Key'C      $ do
-                mTextBuffer <- preuse bufferLens
+                mTextBuffer <- preuse (rendererLens . txrTextBuffer)
                 forM_ mTextBuffer $ \buffer -> 
                     setClipboardString win (selectionFromTextBuffer buffer)
             onKeyDown e Key'V      $ do
                 mString <- getClipboardString win
                 forM_ mString $ \string -> 
-                    bufferLens %= insertString string
+                    (rendererLens . txrTextBuffer) %= insertString string
         | otherwise -> do
 
-            onChar e $ \char      -> bufferLens %= insertChar char
-            onKey  e Key'Enter     $ bufferLens %= insertChar '\n'
-            onKey  e Key'Backspace $ bufferLens %= backspace
+            onChar e $ \char      -> (rendererLens . txrTextBuffer) %= insertChar char
+            onKey  e Key'Enter     $ (rendererLens . txrTextBuffer) %= insertChar '\n'
+            onKey  e Key'Backspace $ (rendererLens . txrTextBuffer) %= backspace
 
-            onKey  e Key'Left      $ bufferLens %= moveLeft
-            onKey  e Key'Right     $ bufferLens %= moveRight
-            onKey  e Key'Down      $ bufferLens %= moveDown
-            onKey  e Key'Up        $ bufferLens %= moveUp
+            onKey  e Key'Left      $ (rendererLens . txrTextBuffer) %= moveLeft
+            onKey  e Key'Right     $ (rendererLens . txrTextBuffer) %= moveRight
+            onKey  e Key'Down      $ (rendererLens . txrTextBuffer) %= moveDown
+            onKey  e Key'Up        $ (rendererLens . txrTextBuffer) %= moveUp
 
-            onKeyWithMods e [ModKeyShift] Key'Left  $ bufferLens %= selectLeft
-            onKeyWithMods e [ModKeyShift] Key'Right $ bufferLens %= selectRight
+            onKeyWithMods e [ModKeyShift] Key'Left  $ (rendererLens . txrTextBuffer) %= selectLeft
+            onKeyWithMods e [ModKeyShift] Key'Right $ (rendererLens . txrTextBuffer) %= selectRight
 
     -- Continuously save the file
     let updateBuffer save = do
-          maybeBuffer <- preuse bufferLens
+          maybeRenderer <- preuse rendererLens
 
-          forM_ maybeBuffer $ \buffer -> do 
+          forM_ maybeRenderer $ \renderer -> do 
 
-            updateIndicesAndOffsets buffer
-            when save $ saveTextBuffer buffer
+            newRenderer <- updateMetrics renderer
+            rendererLens .= newRenderer
+            when save $ saveTextBuffer (newRenderer ^. txrTextBuffer)
     onChar e         $ \_ -> updateBuffer True
     onKey  e Key'Enter     $ updateBuffer True
     onKey  e Key'Backspace $ updateBuffer True
