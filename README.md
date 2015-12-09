@@ -3,8 +3,9 @@
 GL livecoding text editor in Haskell
 
 # TODOs
+[ ] Current indentation
 
-[ ] Fix buffer uniform clobbering
+[x] Fix buffer uniform clobbering
 [ ] Finish vive clicking
 [ ] Only save cursor position and active rick from old state
     so we can update text buffers and positionings
