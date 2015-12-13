@@ -99,6 +99,7 @@ executable editorrick
   default-language:    Haskell2010
 
 executable vrrick
+  -- buildable: False
   hs-source-dirs:      app
   main-is:             VRRick.hs
   ghc-options:         -Wall -O2 -threaded -rtsopts -with-rtsopts=-N
@@ -118,6 +119,7 @@ executable vrrick
   default-language:    Haskell2010
 
 executable keyboardrick
+  buildable: False
   hs-source-dirs:      app
   main-is:             KeyboardRick.hs
   ghc-options:         -Wall -O2 -threaded -rtsopts -with-rtsopts=-N

@@ -96,16 +96,20 @@ main = do
 
 
     -- showHandKeyboard vrPal 
-    void . flip runStateT initialState . whileWindow gpWindow $ 
+    void . flip runStateT initialState . whileVR vrPal $ 
         mainLoop vrPal getCubeShape
 
 
 
-mainLoop :: (MonadState AppState m, MonadIO m) => VRPal -> IO (Shape ShaderPlaneUniforms, String) -> m ()
-mainLoop vrPal@VRPal{..} getCubeShape = do
+mainLoop :: (MonadState AppState m, MonadIO m) 
+         => VRPal 
+         -> IO (Shape ShaderPlaneUniforms, String) 
+         -> M44 GLfloat
+         -> [Hand]
+         -> m ()
+mainLoop vrPal@VRPal{..} getCubeShape headM44 hands = do
     persistState 1
 
-    (hands, _) <- getHands vrPal
     -- Get mouse/keyboard/OS events from GLFW
     activeRickID <- use appActiveRickID
     processEvents gpEvents $ \e -> do
@@ -133,9 +137,9 @@ mainLoop vrPal@VRPal{..} getCubeShape = do
         -- Pass events to the active rickID
         handleTextBufferEvent gpWindow e (appRicks . ix activeRickID . trRenderer)
     
-    let view44 = viewMatrixFromPose newPose
+    let player = newPose
 
-    immutably . renderWith vrPal view44 (glClear (GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT)) $ \proj44 eyeView44 -> do
+    immutably . renderWith vrPal player headM44 (glClear (GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT)) $ \proj44 eyeView44 -> do
         -- Render our scene
         let projView44   = proj44 !*! eyeView44
         now <- realToFrac . utctDayTime <$> liftIO getCurrentTime
