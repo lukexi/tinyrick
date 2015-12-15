@@ -41,6 +41,8 @@ handleTextBufferEvent win e rendererLens = do
                 mString <- getClipboardString win
                 forM_ mString $ \string -> 
                     (rendererLens . txrTextBuffer) %= insertString string
+            onKeyDown e Key'Z      $ 
+                (rendererLens . txrTextBuffer) %= undo
         | otherwise -> do
 
             onChar e $ \char      -> (rendererLens . txrTextBuffer) %= insertChar char
@@ -71,3 +73,6 @@ handleTextBufferEvent win e rendererLens = do
     onKey  e Key'Down      $ updateBuffer False
     onKey  e Key'Left      $ updateBuffer False
     onKey  e Key'Right     $ updateBuffer False
+    onKeyWithMods e [ModKeyShift] Key'Left $ updateBuffer False
+    onKeyWithMods e [ModKeyShift] Key'Right $ updateBuffer False
+    onKeyWithMods e [ModKeySuper] Key'Z $ updateBuffer True
