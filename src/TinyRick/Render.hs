@@ -76,3 +76,4 @@ handleTextBufferEvent win e rendererLens = do
     onKeyWithMods e [ModKeyShift] Key'Left $ updateBuffer False
     onKeyWithMods e [ModKeyShift] Key'Right $ updateBuffer False
     onKeyWithMods e [ModKeySuper] Key'Z $ updateBuffer True
+    onKeyWithMods e [ModKeySuper] Key'V $ updateBuffer True
