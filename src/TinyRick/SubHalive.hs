@@ -104,7 +104,7 @@ withGHCSession importPaths_ action = do
 
         -- Make sure we're configured for live-reload
         let dflags3 = dflags2 { hscTarget   = HscInterpreted
-                              , ghcLink     = LinkDynLib
+                              , ghcLink     = LinkInMemory
                               , ghcMode     = CompManager
                               , importPaths = importPaths_
                               } 
