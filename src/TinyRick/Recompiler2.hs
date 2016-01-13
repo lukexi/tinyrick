@@ -24,8 +24,10 @@ tryReadTChanIO = atomicallyIO . tryReadTChan
 data CompilationRequest = CompilationRequest
     { crFilePath         :: FilePath
     , crExpressionString :: String
-    , crResultTChan      :: TChan (Either [String] HValue)
+    , crResultTChan      :: TChan CompilationResult
     }
+
+newtype CompilationResult = CompilationResult (Either [String] HValue)
 
 startGHC :: MonadIO m => [FilePath] -> m (TChan CompilationRequest)
 startGHC importPaths_ = liftIO $ do
@@ -35,14 +37,14 @@ startGHC importPaths_ = liftIO $ do
         CompilationRequest{..} <- readTChanIO ghcChan
         
         result <- recompileTargets2 crFilePath crExpressionString
-        writeTChanIO crResultTChan result
+        writeTChanIO crResultTChan (CompilationResult result)
     return ghcChan
 
--- We defer the unsafeCoerce to the last moment to avoid making the CompilationRequest/ResultTChan polymorphic
-tryReadResultTChanIO :: (Functor f, MonadIO m) => TChan (f a) -> m (Maybe (f b))
-tryReadResultTChanIO resultTChan = (fmap (fmap unsafeCoerce)) <$> tryReadTChanIO resultTChan
 
-recompilerForExpression :: MonadIO m => (TChan CompilationRequest) -> FilePath -> String -> m (TChan (Either [String] HValue))
+getCompilationResult :: CompilationResult -> Either [String] b
+getCompilationResult (CompilationResult r) = unsafeCoerce <$> r
+
+recompilerForExpression :: MonadIO m => (TChan CompilationRequest) -> FilePath -> String -> m (TChan CompilationResult)
 recompilerForExpression ghcChan filePath expressionString = liftIO $ do
 
     resultTChan <- newTChanIO
