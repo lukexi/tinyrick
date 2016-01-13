@@ -16,10 +16,11 @@ cabal-version:       >=1.10
 library
   hs-source-dirs:      src
   exposed-modules:     TinyRick
-                       TinyRick.Render
-                       TinyRick.Editor
+                       TinyRick.TextInput
                        TinyRick.SubHalive
                        TinyRick.FindPackageDBs
+                       TinyRick.Recompiler1
+                       TinyRick.Recompiler2
                        ShaderRick
   build-depends:       base >= 4.7 && < 5
                      , containers

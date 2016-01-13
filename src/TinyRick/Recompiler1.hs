@@ -1,8 +1,8 @@
 {-# LANGUAGE RecordWildCards #-}
-module TinyRick.Editor where
+module TinyRick.Recompiler1 where
 
 import Graphics.GL.Pal as Exports
-import TinyRick.Render
+import TinyRick.TextInput
 import Graphics.GL.Freetype
 
 import Control.Monad
@@ -14,6 +14,71 @@ import Control.Exception
 import Control.DeepSeq
 
 import TinyRick.SubHalive
+import Control.Monad
+import Control.Monad.IO.Class
+import Data.IORef
+import Control.Concurrent
+import Control.Concurrent.STM
+import TinyRick.FindPackageDBs
+
+import System.FSNotify
+
+{-
+The arrangement of the recompiler as used in Cubensis.
+-}
+
+data CompilationRequest r = CompilationRequest
+    { crFilePath         :: FilePath
+    , crExpressionString :: String
+    , crResultTVar       :: TVar r
+    , crErrorsTVar       :: TVar [String]
+    }
+
+recompilerForExpression :: Chan (CompilationRequest t) -> FilePath -> String -> t -> IO (TVar t, TVar [String])
+recompilerForExpression ghcChan filePath expressionString defaultValue = do
+
+    resultTVar <- newTVarIO defaultValue
+    errorsTVar <- newTVarIO []
+    let compilationRequest = CompilationRequest 
+            { crFilePath = filePath
+            , crExpressionString = expressionString 
+            , crResultTVar = resultTVar
+            , crErrorsTVar = errorsTVar
+            }
+
+    fileEventListener <- eventListenerForFile filePath
+    
+    -- Compile immediately
+    writeChan ghcChan compilationRequest
+
+    -- 
+    _ <- forkIO . forever $ do
+        _ <- liftIO (readChan fileEventListener)
+        writeChan ghcChan compilationRequest
+
+    return (resultTVar, errorsTVar)
+
+startGHC :: [FilePath] -> IO (Chan (CompilationRequest r))
+startGHC importPaths_ = do
+    ghcChan <- newChan
+
+    _ <- forkOS . void . withGHCSession importPaths_ . forever $ do
+        CompilationRequest{..} <- liftIO (readChan ghcChan)
+        
+        result <- recompileTargets crFilePath crExpressionString
+        liftIO . atomically $ case result of
+            Right validResult -> do
+                let noErrors = []
+                writeTVar crResultTVar validResult
+                writeTVar crErrorsTVar noErrors
+            -- If we get a failure, leave the old result alone so it can still be used
+            -- until the errors are fixed.
+            Left  newErrors   -> do
+                writeTVar crErrorsTVar newErrors
+    return ghcChan
+
+
+
 
 data Editor a = Editor
     { edText     :: TVar TextRenderer
@@ -30,11 +95,11 @@ makeExpressionEditor :: Chan (CompilationRequest e)
                      -> e
                      -> M44 GLfloat
                      -> IO (Editor e)
-makeExpressionEditor ghcChan font fileName expr defaultValue modelM44 = do
+makeExpressionEditor ghcChan font fileName exprString defaultValue modelM44 = do
     textTVar              <- newTVarIO =<< textRendererFromFile font fileName
-    (funcTVar, errorTVar) <- recompilerForExpression ghcChan fileName expr defaultValue
+    (exprTVar, errorTVar) <- recompilerForExpression ghcChan fileName exprString defaultValue
   
-    return (Editor textTVar errorTVar funcTVar defaultValue modelM44)
+    return (Editor textTVar errorTVar exprTVar defaultValue modelM44)
 
 -- Evaluates the latest value of the Editor's expression with some transformation,
 -- catching any exceptions that may occur

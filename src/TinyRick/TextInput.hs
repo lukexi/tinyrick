@@ -4,7 +4,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RankNTypes #-}
 
-module TinyRick.Render where
+module TinyRick.TextInput where
 
 import Graphics.UI.GLFW.Pal
 

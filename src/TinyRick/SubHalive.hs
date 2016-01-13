@@ -23,9 +23,9 @@ import TinyRick.FindPackageDBs
 import System.FSNotify
 
 fileModifiedPredicate :: FilePath -> Event -> Bool
-fileModifiedPredicate _fileName event = case event of
-    -- Modified path _ -> path == fileName
-    Modified _path _ -> True
+fileModifiedPredicate fileName event = case event of
+    Modified path _ -> path == fileName
+    -- Modified _path _ -> True
     _               -> False
 
 eventListenerForFile :: FilePath -> IO (Chan Event)
@@ -37,56 +37,6 @@ eventListenerForFile fileName = do
         _stop <- watchTreeChan manager watchDirec predicate eventChan
         forever (threadDelay 10000000)
     return eventChan
-
-data CompilationRequest r = CompilationRequest
-    { crFilePath         :: FilePath
-    , crExpressionString :: String
-    , crResultTVar       :: TVar r
-    , crErrorsTVar       :: TVar [String]
-    }
-
-recompilerForExpression :: Chan (CompilationRequest t) -> FilePath -> String -> t -> IO (TVar t, TVar [String])
-recompilerForExpression ghcChan filePath expressionString defaultValue = do
-
-    resultTVar <- newTVarIO defaultValue
-    errorsTVar <- newTVarIO []
-    let compilationRequest = CompilationRequest 
-            { crFilePath = filePath
-            , crExpressionString = expressionString 
-            , crResultTVar = resultTVar
-            , crErrorsTVar = errorsTVar
-            }
-
-    listenerChan <- eventListenerForFile filePath
-    
-    -- Compile immediately
-    writeChan ghcChan compilationRequest
-
-    _ <- forkIO . forever $ do
-        _ <- liftIO (readChan listenerChan)
-        writeChan ghcChan compilationRequest
-
-    return (resultTVar, errorsTVar)
-
-startGHC :: [FilePath] -> IO (Chan (CompilationRequest r))
-startGHC importPaths_ = do
-    ghcChan <- newChan
-
-    _ <- forkOS . void . withGHCSession importPaths_ . forever $ do
-        -- (fileName, expression, resultTVar, errorsTVar)
-        CompilationRequest{..} <- liftIO (readChan ghcChan)
-        
-        result <- recompileTargets crFilePath crExpressionString
-        liftIO . atomically $ case result of
-            Right validResult -> do
-                let noErrors = []
-                writeTVar crResultTVar validResult
-                writeTVar crErrorsTVar noErrors
-            -- If we get a failure, leave the old result alone so it can still be used
-            -- until the errors are fixed.
-            Left  newErrors   -> do
-                writeTVar crErrorsTVar newErrors
-    return ghcChan
 
 -- Starts up a GHC session and then runs the given action within it
 withGHCSession :: [FilePath] -> Ghc a -> IO a
