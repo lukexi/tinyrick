@@ -10,7 +10,9 @@ atomicallyIO :: MonadIO m => STM a -> m a
 atomicallyIO = liftIO . atomically
 readTChanIO = atomicallyIO . readTChan
 writeTChanIO chan = atomicallyIO . writeTChan chan
-tryReadTChanIO chan = atomicallyIO . tryReadTChan
+
+tryReadTChanIO :: MonadIO m => TChan a -> m (Maybe a)
+tryReadTChanIO = atomicallyIO . tryReadTChan
 
 data CompilationRequest r = CompilationRequest
     { crFilePath         :: FilePath
