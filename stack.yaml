@@ -10,4 +10,4 @@ packages:
 - '../vr-pal'
 - '../openvr-hs'
 - '../bindings-GLFW'
-resolver: nightly-2015-12-03
+resolver: nightly-2016-01-10

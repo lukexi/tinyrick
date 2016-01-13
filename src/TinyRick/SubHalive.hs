@@ -17,7 +17,6 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Data.IORef
 import Control.Concurrent
-import Control.Concurrent.STM
 import TinyRick.FindPackageDBs
 
 import System.FSNotify
@@ -122,6 +121,42 @@ recompileTargets fileName expression =
                 setContext (IIModule . ms_mod_name <$> graph)
 
                 result <- unsafeCoerce <$> compileExpr expression
+
+                return (Right result)
+
+-- | This version returns the uncoerced HValue, which lets me send polymorphic values back through channels
+-- in Recompiler2
+recompileTargets2 :: FilePath -> String -> Ghc (Either [String] HValue)
+recompileTargets2 fileName expression = 
+    -- NOTE: handleSourceError doesn't actually seem to do anything, and we use
+    -- the IORef + log_action solution instead. The API docs claim 'load' should
+    -- throw SourceErrors but it doesn't afaict.
+    catchExceptions . handleSourceError (fmap Left . gatherErrors) $ do
+
+        setTargets =<< sequence [guessTarget fileName Nothing]
+
+        errorsRef <- liftIO (newIORef "")
+        dflags <- getSessionDynFlags
+        _ <- setSessionDynFlags dflags { log_action = logHandler errorsRef }
+
+        -- Get the dependencies of the main target
+        graph <- depanal [] False
+
+        -- Reload the main target
+        loadSuccess <- load LoadAllTargets
+
+        if failed loadSuccess 
+            then do
+                errors <- liftIO (readIORef errorsRef)
+                return (Left [errors])
+            else do
+                -- We must parse and typecheck modules before they'll be available for usage
+                forM_ graph (typecheckModule <=< parseModule)
+                
+                -- Load the dependencies of the main target
+                setContext (IIModule . ms_mod_name <$> graph)
+
+                result <- compileExpr expression
 
                 return (Right result)
 

@@ -14,14 +14,6 @@ import Control.Exception
 import Control.DeepSeq
 
 import TinyRick.SubHalive
-import Control.Monad
-import Control.Monad.IO.Class
-import Data.IORef
-import Control.Concurrent
-import Control.Concurrent.STM
-import TinyRick.FindPackageDBs
-
-import System.FSNotify
 
 {-
 The arrangement of the recompiler as used in Cubensis.
@@ -119,6 +111,7 @@ getEditorValue Editor{..} defaultValue transformValue = do
 
     return checkedValue
 
+editEditorText :: Editor t -> (TextRenderer -> IO TextRenderer) -> IO ()
 editEditorText Editor{..} f = do
   text <- atomically $ readTVar edText
   newText <- f text
