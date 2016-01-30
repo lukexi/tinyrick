@@ -3,6 +3,9 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE LambdaCase #-}
 
 module TinyRick.TextInput where
 
@@ -13,7 +16,10 @@ import Control.Monad
 import Control.Monad.State
 
 import Graphics.GL.Freetype
+import Data.Char
 
+-- | Recognize certain control characters and react to them appropriately
+isBackspaceChar = (== 8) . ord
 
 textRendererFromFile :: MonadIO m => Font -> FilePath -> m TextRenderer
 textRendererFromFile font filePath = liftIO $ do
@@ -45,7 +51,9 @@ handleTextBufferEvent win e rendererLens = do
                 (rendererLens . txrTextBuffer) %= undo
         | otherwise -> do
 
-            onChar e $ \char      -> (rendererLens . txrTextBuffer) %= insertChar char
+            onChar e $ \case 
+                (isBackspaceChar -> True) -> (rendererLens . txrTextBuffer) %= backspace
+                char                      -> (rendererLens . txrTextBuffer) %= insertChar char
             onKey  e Key'Enter     $ (rendererLens . txrTextBuffer) %= insertChar '\n'
             onKey  e Key'Backspace $ (rendererLens . txrTextBuffer) %= backspace
 

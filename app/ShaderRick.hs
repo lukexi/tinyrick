@@ -54,7 +54,7 @@ main = do
 
     (win, events) <- reacquire 0 $ createWindow "Tiny Rick" 1024 768
 
-    glyphProg <- createShaderProgram "src/TinyRick/glyph.vert" "src/TinyRick/glyph.frag"
+    glyphProg <- createShaderProgram "app/glyph.vert" "app/glyph.frag"
     font      <- createFont fontFile 30 glyphProg
 
     -- planeGeometry size normal up subdivisions

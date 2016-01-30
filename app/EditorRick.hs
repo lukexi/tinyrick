@@ -54,7 +54,7 @@ main = do
 
     (win, events) <- reacquire 0 $ createWindow "Tiny Rick" 1024 768
 
-    glyphProg <- createShaderProgram "src/TinyRick/glyph.vert" "src/TinyRick/glyph.frag"
+    glyphProg <- createShaderProgram "app/glyph.vert" "app/glyph.frag"
     font      <- createFont fontFile 50 glyphProg
 
     -- planeGeometry size normal up subdivisions
@@ -74,8 +74,8 @@ main = do
     initialState <- flip execStateT newAppState $ do
       -- Create an editor instance for each fragment shader
       forM_ (zip [0..] shaders) $ \(i, fragShaderPath) -> do
-        let position = (V3 0 0 (-1))
-            pose = newPose & posPosition .~ position
+        let position = (V3 0.5 0 (-2))
+            pose = newPose & posPosition .~ position & posOrientation .~ axisAngle (V3 1 0 0) (0.4)
             vertShaderPath = "app/geo.vert"
         getPlane <- shaderRecompiler vertShaderPath fragShaderPath (makeShape planeGeo)
 
@@ -107,8 +107,9 @@ mainLoop win events = do
             ray <- cursorPosToWorldRay win winProj44 newPose
             forM_ (Map.toList ricks) $ \(rickID, rick) -> do
                 let model44 = transformationFromPose (rick ^. trPose)
-                updatedRenderer <- castRayToBuffer ray (rick ^. trRenderer) model44
-                appRicks . ix rickID . trRenderer .= updatedRenderer
+                mUpdatedTextRenderer <- castRayToTextRenderer ray (rick ^. trRenderer) model44
+                forM_ mUpdatedTextRenderer $ \updatedTextRenderer ->
+                    appRicks . ix rickID . trRenderer .= updatedTextRenderer
 
         
         -- Switch which rick has focus on Tab

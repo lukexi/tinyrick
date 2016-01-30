@@ -56,7 +56,7 @@ main = do
 
     vrPal@VRPal{..} <- reacquire 0 $ initVRPal "VR Rick" [UseOpenVR]
 
-    glyphProg <- createShaderProgram "src/TinyRick/glyph.vert" "src/TinyRick/glyph.frag"
+    glyphProg <- createShaderProgram "app/glyph.vert" "app/glyph.frag"
     font      <- createFont fontFile 50 glyphProg
 
     --                        size     normal     up         subdivisions
@@ -106,8 +106,9 @@ mainLoop :: (MonadState AppState m, MonadIO m)
          -> IO (Shape ShaderPlaneUniforms, String) 
          -> M44 GLfloat
          -> [Hand]
+         -> [VREvent]
          -> m ()
-mainLoop vrPal@VRPal{..} getCubeShape headM44 hands = do
+mainLoop vrPal@VRPal{..} getCubeShape headM44 hands vrEvents = do
     persistState 1
 
     -- Get mouse/keyboard/OS events from GLFW
@@ -122,8 +123,9 @@ mainLoop vrPal@VRPal{..} getCubeShape headM44 hands = do
             ray <- cursorPosToWorldRay gpWindow winProj44 newPose
             forM_ (Map.toList ricks) $ \(rickID, rick) -> do
                 let model44 = transformationFromPose (rick ^. trPose)
-                updatedBuffer <- castRayToBuffer ray (rick ^. trRenderer) model44
-                appRicks . ix rickID . trRenderer .= updatedBuffer
+                mUpdatedTextRenderer <- castRayToTextRenderer ray (rick ^. trRenderer) model44
+                forM_ mUpdatedTextRenderer $ \updatedTextRenderer ->
+                    appRicks . ix rickID . trRenderer .= updatedTextRenderer
 
         
         -- Switch which rick has focus on Tab
@@ -136,6 +138,11 @@ mainLoop vrPal@VRPal{..} getCubeShape headM44 hands = do
 
         -- Pass events to the active rickID
         handleTextBufferEvent gpWindow e (appRicks . ix activeRickID . trRenderer)
+        forM_ vrEvents $ \case
+            VRKeyboardInputEvent chars -> forM_ chars $ \char -> 
+                handleTextBufferEvent gpWindow (Character char)
+                    (appRicks . ix activeRickID . trRenderer)
+            _ -> return ()
     
     let player = newPose
 

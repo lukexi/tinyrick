@@ -38,7 +38,7 @@ main = do
     -- texture <- loadTexture "textures/SightToSound-01.png" SRGB
     -- texture <- loadTexture "textures/Clock-Black-01.png" SRGB
 
-    glyphProg <- createShaderProgram "src/TinyRick/glyph.vert" "src/TinyRick/glyph.frag"
+    glyphProg <- createShaderProgram "app/glyph.vert" "app/glyph.frag"
     font      <- createFont fontFile 30 glyphProg
 
     -- planeGeometry size normal up subdivisions
