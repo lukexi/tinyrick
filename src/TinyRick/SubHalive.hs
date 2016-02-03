@@ -20,20 +20,21 @@ import Control.Concurrent
 import TinyRick.FindPackageDBs
 
 import System.FSNotify
+import System.Directory
 
 fileModifiedPredicate :: FilePath -> Event -> Bool
 fileModifiedPredicate fileName event = case event of
     Modified path _ -> path == fileName
-    -- Modified _path _ -> True
     _               -> False
 
 eventListenerForFile :: FilePath -> IO (Chan Event)
 eventListenerForFile fileName = do
-    let predicate = fileModifiedPredicate fileName
+    fileNameCanon <- canonicalizePath fileName
+    let predicate = fileModifiedPredicate fileNameCanon
     eventChan <- newChan
     _ <- forkIO . withManager $ \manager -> do
-        let watchDirec = "."
-        _stop <- watchTreeChan manager watchDirec predicate eventChan
+        let watchDirectory = "."
+        _stop <- watchTreeChan manager watchDirectory predicate eventChan
         forever (threadDelay 10000000)
     return eventChan
 
