@@ -2,8 +2,8 @@
 module TinyRick.Recompiler1 where
 
 import Graphics.GL.Pal as Exports
-import TinyRick.TextInput
 import Graphics.GL.Freetype
+import Graphics.GL.TextBuffer
 
 import Control.Monad
 import Control.Lens.Extra

@@ -16,7 +16,6 @@ cabal-version:       >=1.10
 library
   hs-source-dirs:      src
   exposed-modules:     TinyRick
-                       TinyRick.TextInput
                        TinyRick.SubHalive
                        TinyRick.FindPackageDBs
                        TinyRick.Recompiler1
