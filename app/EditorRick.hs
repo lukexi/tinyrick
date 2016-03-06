@@ -107,9 +107,8 @@ mainLoop win events = do
             ray <- cursorPosToWorldRay win winProj44 newPose
             forM_ (Map.toList ricks) $ \(rickID, rick) -> do
                 let model44 = transformationFromPose (rick ^. trPose)
-                mUpdatedTextRenderer <- castRayToTextRenderer ray (rick ^. trRenderer) model44
-                forM_ mUpdatedTextRenderer $ \updatedTextRenderer ->
-                    appRicks . ix rickID . trRenderer .= updatedTextRenderer
+                updatedTextRenderer <- setCursorTextRendererWithRay ray (rick ^. trRenderer) model44
+                appRicks . ix rickID . trRenderer .= updatedTextRenderer
 
         
         -- Switch which rick has focus on Tab

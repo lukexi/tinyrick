@@ -123,9 +123,8 @@ mainLoop vrPal@VRPal{..} getCubeShape headM44 hands vrEvents = do
             ray <- cursorPosToWorldRay gpWindow winProj44 newPose
             forM_ (Map.toList ricks) $ \(rickID, rick) -> do
                 let model44 = transformationFromPose (rick ^. trPose)
-                mUpdatedTextRenderer <- castRayToTextRenderer ray (rick ^. trRenderer) model44
-                forM_ mUpdatedTextRenderer $ \updatedTextRenderer ->
-                    appRicks . ix rickID . trRenderer .= updatedTextRenderer
+                updatedTextRenderer <- setCursorTextRendererWithRay ray (rick ^. trRenderer) model44
+                appRicks . ix rickID . trRenderer .= updatedTextRenderer
 
         
         -- Switch which rick has focus on Tab
@@ -180,7 +179,7 @@ mainLoop vrPal@VRPal{..} getCubeShape headM44 hands vrEvents = do
                         drawShape
 
                     when (not (null shaderErrors)) $ do
-                        renderer <- liftIO $ createTextRenderer font (textBufferFromString "" shaderErrors)
+                        renderer <- liftIO $ createTextRenderer font (textBufferFromString shaderErrors)
                         renderText renderer (mvp !*! translateMatrix (V3 1 0 0)) (V3 1 0.5 0.5)
                 Nothing -> return ()
 
