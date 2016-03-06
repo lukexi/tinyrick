@@ -27,3 +27,8 @@ GL livecoding text editor in Haskell
 [x] Copy/paste support
 
 [x] Store cursor pos for halive usage
+
+
+[ ] For Subhalive:
+    Keep a single Map of filename->result mvars.
+    One FSNotify watcher and a broadcast chan

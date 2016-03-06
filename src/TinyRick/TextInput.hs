@@ -19,6 +19,7 @@ import Graphics.GL.Freetype
 import Data.Char
 
 -- | Recognize certain control characters and react to them appropriately
+isBackspaceChar :: Char -> Bool
 isBackspaceChar = (== 8) . ord
 
 textRendererFromFile :: MonadIO m => Font -> FilePath -> m TextRenderer
